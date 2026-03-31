@@ -1,0 +1,7 @@
+streamlit>=1.36
+sqlalchemy>=2.0
+pydantic>=2.7
+bibtexparser>=1.4
+rapidfuzz>=3.9
+python-dateutil>=2.9
+pandas>=2.2
