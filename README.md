@@ -1,14 +1,66 @@
-# 起動
+# BibManager
 
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-streamlit run app.py
+bibファイルと同期できる文献管理Webアプリ。
 
-# 機能
+## セットアップ
 
-- BibTeX 単件登録
-- bib 一括インポート
-- tags / keywords / notes / read status 管理
-- arXiv ベースの yyyymm ソート
-- 正規化 BibTeX エクスポート
+### 必要なもの
+- Python 3.10 以上
+- Flask（唯一の外部依存）
+
+```bash
+pip install flask
+```
+
+### 起動
+
+```bash
+cd bibmanager
+python app.py
+```
+
+ブラウザで http://localhost:5000 を開く。
+
+## 初回の使い方
+
+1. 画面右上の **「⬆ Import .bib」** をクリック
+2. `.bib` ファイルをドラッグ&ドロップ、またはクリックして選択
+3. インポート完了（追加/更新/スキップ件数が表示される）
+
+## 機能
+
+| 機能 | 操作 |
+|------|------|
+| 検索 | ヘッダーの検索バー（タイトル・著者・キーワード・メモを全文検索） |
+| `/` キー | 検索バーにフォーカス |
+| タグフィルタ | 左サイドバーのタグをクリック（AND絞り込み） |
+| 年フィルタ | 左サイドバーの年入力欄 |
+| 詳細表示 | 文献カードをクリック |
+| タグ追加 | 詳細パネル > タグ欄にタイプ（Enterまたはカンマで確定、既存タグはオートコンプリート） |
+| キーワード追加 | 詳細パネル > キーワード欄にタイプ（Enterで確定） |
+| 読書メモ | 詳細パネル > 「実際に何が書かれていたか」欄（フォーカスが外れたとき自動保存） |
+| 他文献での言及 | 詳細パネル > 「他の文献での言及」> 「＋ 言及を追加」 |
+| BibTeX コピー | 詳細パネル > BibTeX欄の📋ボタン |
+| エクスポート | ヘッダーの「⬇ Export .bib」 |
+
+## bibファイルとの同期
+
+- **インポート:** bibファイルを読み込む。既存エントリはbibフィールドのみ更新し、タグ・メモは保持。
+- **エクスポート:** 現在のDBの全エントリをbibファイルとして出力。
+
+## ファイル構成
+
+```
+bibmanager/
+├── app.py          # Flaskアプリ本体・APIエンドポイント
+├── bib_parser.py   # bibファイルのパース（純Pythonで外部依存なし）
+├── database.py     # SQLite操作・CRUD
+├── bibmanager.db   # データベース（自動生成）
+├── templates/
+│   └── index.html  # フロントエンドUI
+└── README.md
+```
+
+## データベースのバックアップ
+
+`bibmanager.db` を定期的にコピーしておくことを推奨。
