@@ -54,10 +54,16 @@ def init_db():
             PRIMARY KEY (entry_id, tag_id)
         );
 
-        CREATE TABLE IF NOT EXISTS keywords (
-            id       INTEGER PRIMARY KEY AUTOINCREMENT,
-            entry_id INTEGER NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
-            keyword  TEXT    NOT NULL
+        -- Global keyword master list (mirrors tags structure)
+        CREATE TABLE IF NOT EXISTS keyword_list (
+            id   INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS entry_keywords (
+            entry_id   INTEGER NOT NULL REFERENCES entries(id)       ON DELETE CASCADE,
+            keyword_id INTEGER NOT NULL REFERENCES keyword_list(id)  ON DELETE CASCADE,
+            PRIMARY KEY (entry_id, keyword_id)
         );
 
         CREATE TABLE IF NOT EXISTS reading_notes (
@@ -106,8 +112,33 @@ def init_db():
         END;
     """)
 
+    # Migration: move old free-text keywords table -> keyword_list + entry_keywords
+    _migrate_keywords(cur)
+
     conn.commit()
     conn.close()
+
+
+def _migrate_keywords(cur):
+    """One-time migration from old per-paper free-text keywords to global keyword_list."""
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='keywords'")
+    if not cur.fetchone():
+        return  # old table doesn't exist, nothing to migrate
+
+    cur.execute("SELECT entry_id, keyword FROM keywords")
+    rows = cur.fetchall()
+    for entry_id, kw in rows:
+        kw = kw.strip()
+        if not kw:
+            continue
+        cur.execute("INSERT OR IGNORE INTO keyword_list (name) VALUES (?)", (kw,))
+        cur.execute("SELECT id FROM keyword_list WHERE name = ?", (kw,))
+        kw_id = cur.fetchone()[0]
+        cur.execute(
+            "INSERT OR IGNORE INTO entry_keywords (entry_id, keyword_id) VALUES (?, ?)",
+            (entry_id, kw_id),
+        )
+    cur.execute("DROP TABLE IF EXISTS keywords")
 
 
 # ---------------------------------------------------------------------------
@@ -117,6 +148,7 @@ def init_db():
 def search_entries(
     q: str = '',
     tag_ids: list[int] = None,
+    kw_ids: list[int] = None,
     year_from: int = None,
     year_to: int = None,
     limit: int = 50,
@@ -134,11 +166,9 @@ def search_entries(
     where_clauses: list[str] = []
 
     if q:
-        # Use FTS for main fields
         fts_ids = _fts_search(cur, q)
-        # Also search keywords and notes
-        kw_ids = _keyword_note_search(cur, q)
-        all_ids = list(set(fts_ids) | set(kw_ids))
+        note_ids = _note_search(cur, q)
+        all_ids = list(set(fts_ids) | set(note_ids))
         if not all_ids:
             conn.close()
             return [], 0
@@ -160,6 +190,13 @@ def search_entries(
             )
             params.append(tid)
 
+    if kw_ids:
+        for kid in kw_ids:
+            where_clauses.append(
+                "e.id IN (SELECT entry_id FROM entry_keywords WHERE keyword_id = ?)"
+            )
+            params.append(kid)
+
     where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
 
     count_sql = f"SELECT COUNT(*) FROM entries e {where_sql}"
@@ -177,7 +214,6 @@ def search_entries(
     cur.execute(data_sql, params + [limit, offset])
     rows = [dict(r) for r in cur.fetchall()]
 
-    # Attach tags for each row
     for row in rows:
         cur.execute("""
             SELECT t.id, t.name FROM tags t
@@ -198,7 +234,6 @@ def _fts_search(cur, q: str) -> list[int]:
         )
         return [r[0] for r in cur.fetchall()]
     except Exception:
-        # Fallback to LIKE if FTS query has syntax issues
         like = f'%{q}%'
         cur.execute("""
             SELECT id FROM entries
@@ -208,15 +243,19 @@ def _fts_search(cur, q: str) -> list[int]:
         return [r[0] for r in cur.fetchall()]
 
 
-def _keyword_note_search(cur, q: str) -> list[int]:
+def _note_search(cur, q: str) -> list[int]:
     like = f'%{q}%'
-    cur.execute("SELECT DISTINCT entry_id FROM keywords WHERE keyword LIKE ?", (like,))
-    ids = [r[0] for r in cur.fetchall()]
     cur.execute("""
         SELECT DISTINCT entry_id FROM reading_notes WHERE content LIKE ?
         UNION
         SELECT DISTINCT entry_id FROM citations_in_other_papers WHERE content LIKE ?
     """, (like, like))
+    ids = [r[0] for r in cur.fetchall()]
+    cur.execute("""
+        SELECT DISTINCT ek.entry_id FROM entry_keywords ek
+        JOIN keyword_list kl ON kl.id = ek.keyword_id
+        WHERE kl.name LIKE ?
+    """, (like,))
     ids += [r[0] for r in cur.fetchall()]
     return ids
 
@@ -239,7 +278,12 @@ def get_entry(entry_id: int) -> dict | None:
     """, (entry_id,))
     entry['tags'] = [dict(r) for r in cur.fetchall()]
 
-    cur.execute("SELECT id, keyword FROM keywords WHERE entry_id = ? ORDER BY id", (entry_id,))
+    cur.execute("""
+        SELECT kl.id, kl.name FROM keyword_list kl
+        JOIN entry_keywords ek ON ek.keyword_id = kl.id
+        WHERE ek.entry_id = ?
+        ORDER BY kl.name
+    """, (entry_id,))
     entry['keywords'] = [dict(r) for r in cur.fetchall()]
 
     cur.execute("SELECT id, content, updated_at FROM reading_notes WHERE entry_id = ?", (entry_id,))
@@ -330,17 +374,72 @@ def rename_tag(tag_id: int, new_name: str):
 
 
 # ---------------------------------------------------------------------------
-# Keyword operations
+# Keyword operations (global list)
 # ---------------------------------------------------------------------------
 
-def set_entry_keywords(entry_id: int, keywords: list[str]):
+def get_all_keywords() -> list[dict]:
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute("DELETE FROM keywords WHERE entry_id = ?", (entry_id,))
-    for kw in keywords:
-        kw = kw.strip()
-        if kw:
-            cur.execute("INSERT INTO keywords (entry_id, keyword) VALUES (?, ?)", (entry_id, kw))
+    cur.execute("""
+        SELECT kl.id, kl.name, COUNT(ek.entry_id) as count
+        FROM keyword_list kl
+        LEFT JOIN entry_keywords ek ON ek.keyword_id = kl.id
+        GROUP BY kl.id
+        ORDER BY kl.name
+    """)
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+def get_or_create_keyword(name: str) -> int:
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT id FROM keyword_list WHERE name = ?", (name.strip(),))
+    row = cur.fetchone()
+    if row:
+        kw_id = row[0]
+    else:
+        cur.execute("INSERT INTO keyword_list (name) VALUES (?)", (name.strip(),))
+        kw_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    return kw_id
+
+
+def set_entry_keywords(entry_id: int, kw_names: list[str]):
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM entry_keywords WHERE entry_id = ?", (entry_id,))
+    for name in kw_names:
+        name = name.strip()
+        if not name:
+            continue
+        cur.execute("SELECT id FROM keyword_list WHERE name = ?", (name,))
+        row = cur.fetchone()
+        if row:
+            kw_id = row[0]
+        else:
+            cur.execute("INSERT INTO keyword_list (name) VALUES (?)", (name,))
+            kw_id = cur.lastrowid
+        cur.execute(
+            "INSERT OR IGNORE INTO entry_keywords (entry_id, keyword_id) VALUES (?, ?)",
+            (entry_id, kw_id)
+        )
+    conn.commit()
+    conn.close()
+
+
+def delete_keyword(kw_id: int):
+    conn = get_conn()
+    conn.execute("DELETE FROM keyword_list WHERE id = ?", (kw_id,))
+    conn.commit()
+    conn.close()
+
+
+def rename_keyword(kw_id: int, new_name: str):
+    conn = get_conn()
+    conn.execute("UPDATE keyword_list SET name = ? WHERE id = ?", (new_name.strip(), kw_id))
     conn.commit()
     conn.close()
 

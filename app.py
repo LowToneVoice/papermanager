@@ -12,6 +12,7 @@ from flask import Flask, render_template, request, jsonify, send_file
 
 import database as db
 from bib_parser import parse_bib_string, import_entries_to_db
+from notion_import import import_notion_csv
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024  # 32 MB upload limit
@@ -41,13 +42,14 @@ def index():
 def api_entries():
     q        = request.args.get('q', '').strip()
     tag_ids  = [int(x) for x in request.args.getlist('tag') if x.isdigit()]
+    kw_ids   = [int(x) for x in request.args.getlist('kw') if x.isdigit()]
     year_from = _safe_int(request.args.get('year_from'))
     year_to   = _safe_int(request.args.get('year_to'))
-    limit  = min(int(request.args.get('limit', 50)), 200)
+    limit  = min(int(request.args.get('limit', 2000)), 2000)
     offset = int(request.args.get('offset', 0))
 
     rows, total = db.search_entries(
-        q=q, tag_ids=tag_ids,
+        q=q, tag_ids=tag_ids, kw_ids=kw_ids,
         year_from=year_from, year_to=year_to,
         limit=limit, offset=offset,
     )
@@ -114,6 +116,41 @@ def api_rename_tag(tag_id):
 
 
 # ---------------------------------------------------------------------------
+# Keywords
+# ---------------------------------------------------------------------------
+
+@app.route('/api/keywords')
+def api_keywords():
+    return jsonify(db.get_all_keywords())
+
+
+@app.route('/api/keywords', methods=['POST'])
+def api_create_keyword():
+    data = request.get_json(force=True)
+    name = data.get('name', '').strip()
+    if not name:
+        return jsonify({'error': 'name required'}), 400
+    kw_id = db.get_or_create_keyword(name)
+    return jsonify({'id': kw_id, 'name': name})
+
+
+@app.route('/api/keywords/<int:kw_id>', methods=['DELETE'])
+def api_delete_keyword(kw_id):
+    db.delete_keyword(kw_id)
+    return jsonify({'ok': True})
+
+
+@app.route('/api/keywords/<int:kw_id>', methods=['PATCH'])
+def api_rename_keyword(kw_id):
+    data = request.get_json(force=True)
+    new_name = data.get('name', '').strip()
+    if not new_name:
+        return jsonify({'error': 'name required'}), 400
+    db.rename_keyword(kw_id, new_name)
+    return jsonify({'ok': True})
+
+
+# ---------------------------------------------------------------------------
 # Citations in other papers
 # ---------------------------------------------------------------------------
 
@@ -148,7 +185,7 @@ def api_delete_citation(cit_id):
 
 
 # ---------------------------------------------------------------------------
-# Import
+# Import (.bib)
 # ---------------------------------------------------------------------------
 
 @app.route('/api/import', methods=['POST'])
@@ -161,6 +198,20 @@ def api_import():
     conn = db.get_conn()
     summary = import_entries_to_db(entries, conn)
     conn.close()
+    return jsonify(summary)
+
+
+# ---------------------------------------------------------------------------
+# Import (Notion CSV)
+# ---------------------------------------------------------------------------
+
+@app.route('/api/notion-import', methods=['POST'])
+def api_notion_import():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file uploaded'}), 400
+    f = request.files['file']
+    text = f.read().decode('utf-8', errors='replace')
+    summary = import_notion_csv(text)
     return jsonify(summary)
 
 

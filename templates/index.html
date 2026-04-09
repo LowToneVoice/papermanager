@@ -95,6 +95,8 @@
   .btn-primary:hover { background: #3a7de8; }
   .btn-danger  { color: var(--red); }
   .btn-danger:hover { border-color: var(--red); }
+  .btn-notion { background: var(--bg3); border-color: #555; color: var(--text); }
+  .btn-notion:hover { border-color: var(--accent2); }
 
   /* ── Main layout ── */
   .main {
@@ -122,6 +124,9 @@
     text-transform: uppercase;
     color: var(--muted);
     margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
   }
   .stat-row {
     display: flex;
@@ -145,11 +150,16 @@
   }
   .year-inputs input:focus { border-color: var(--accent); }
 
-  /* Tags */
-  .tags-list {
-    flex: 1;
+  /* Tags / Keywords sidebar list */
+  .filter-list {
     overflow-y: auto;
-    padding: 8px 6px;
+    padding: 6px;
+    flex-shrink: 0;
+    max-height: 220px;
+  }
+  .filter-list.kw-list {
+    border-top: 1px solid var(--border);
+    flex: 1;
   }
   .tag-item {
     display: flex;
@@ -163,10 +173,17 @@
   }
   .tag-item:hover { background: var(--bg3); }
   .tag-item.active { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+  .tag-item.active-kw { background: color-mix(in srgb, var(--green) 18%, transparent); }
   .tag-dot {
     width: 8px; height: 8px;
     border-radius: 50%;
     background: var(--accent2);
+    flex-shrink: 0;
+  }
+  .kw-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--green);
     flex-shrink: 0;
   }
   .tag-name { flex: 1; }
@@ -197,37 +214,62 @@
   .entry-list {
     flex: 1;
     overflow-y: auto;
-    padding: 8px;
+    padding: 0;
   }
 
-  .entry-card {
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 12px 14px;
-    margin-bottom: 6px;
+  /* ── Table view ── */
+  .entry-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .entry-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--bg3);
+  }
+  .entry-table th {
+    padding: 8px 12px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
     cursor: pointer;
-    transition: border-color .12s, background .12s;
-    position: relative;
+    user-select: none;
   }
-  .entry-card:hover { border-color: var(--accent); background: var(--bg3); }
-  .entry-card.active {
-    border-color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 8%, var(--bg2));
+  .entry-table th:hover { color: var(--text); }
+  .entry-table th .sort-arrow { margin-left: 3px; opacity: .5; }
+  .entry-table th.sorted .sort-arrow { opacity: 1; color: var(--accent); }
+
+  .entry-table tbody tr {
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background .1s;
   }
-  .entry-card-top {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    margin-bottom: 4px;
+  .entry-table tbody tr:hover { background: var(--bg3); }
+  .entry-table tbody tr.active {
+    background: color-mix(in srgb, var(--accent) 10%, var(--bg2));
   }
-  .entry-year {
-    font-size: 12px;
+  .entry-table td {
+    padding: 7px 12px;
+    vertical-align: middle;
+    line-height: 1.4;
+  }
+  .td-year {
+    width: 52px;
     color: var(--yellow);
     font-weight: 700;
     white-space: nowrap;
   }
-  .entry-type-badge {
+  .td-type {
+    width: 70px;
+  }
+  .type-badge {
     font-size: 10px;
     padding: 1px 6px;
     border-radius: 4px;
@@ -236,46 +278,46 @@
     border: 1px solid var(--border);
     white-space: nowrap;
   }
-  .entry-title {
-    font-size: 14px;
-    font-weight: 600;
-    line-height: 1.4;
-    margin-bottom: 4px;
+  .td-title {
+    min-width: 200px;
+    max-width: 340px;
   }
-  .entry-authors {
-    font-size: 12px;
-    color: var(--muted);
-    margin-bottom: 6px;
-    white-space: nowrap;
+  .td-title-text {
+    font-weight: 600;
     overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .td-authors {
+    width: 180px;
+    max-width: 180px;
+    color: var(--muted);
+    overflow: hidden;
+    white-space: nowrap;
     text-overflow: ellipsis;
   }
-  .entry-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+  .td-tags {
+    min-width: 100px;
+  }
+  .td-tags-wrap { display: flex; flex-wrap: wrap; gap: 3px; }
   .tag-badge {
-    font-size: 11px;
-    padding: 2px 8px;
+    font-size: 10px;
+    padding: 1px 7px;
     border-radius: 10px;
     background: color-mix(in srgb, var(--accent2) 20%, transparent);
     color: color-mix(in srgb, var(--accent2) 80%, var(--text));
     border: 1px solid color-mix(in srgb, var(--accent2) 40%, transparent);
+    white-space: nowrap;
   }
   .arxiv-badge {
-    font-size: 11px;
-    padding: 2px 7px;
+    font-size: 10px;
+    padding: 1px 6px;
     border-radius: 4px;
     background: color-mix(in srgb, var(--red) 15%, transparent);
     color: #e08080;
     border: 1px solid color-mix(in srgb, var(--red) 30%, transparent);
-  }
-
-  .pagination {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 12px;
-    border-top: 1px solid var(--border);
-    font-size: 13px;
+    white-space: nowrap;
   }
 
   /* ── Detail panel ── */
@@ -390,7 +432,7 @@
   .autocomplete-item:hover,
   .autocomplete-item.hl { background: var(--border); }
 
-  /* Keyword editor */
+  /* Keyword editor (global list, same UX as tags) */
   .kw-wrap {
     display: flex;
     flex-wrap: wrap;
@@ -542,7 +584,7 @@
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
   ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 
-  /* ── Import modal ── */
+  /* ── Modal ── */
   .modal-overlay {
     position: fixed; inset: 0;
     background: rgba(0,0,0,.6);
@@ -587,9 +629,14 @@
     margin-top: 12px;
     display: none;
   }
-
-  /* Responsive: when detail panel is open, shrink list */
-  .detail-panel.open ~ * { /* not needed; overlay approach */ }
+  .notion-errors {
+    margin-top: 8px;
+    max-height: 120px;
+    overflow-y: auto;
+    font-size: 11px;
+    color: var(--muted);
+    font-family: var(--font-mono);
+  }
 </style>
 </head>
 <body>
@@ -605,6 +652,7 @@
   </div>
   <div class="header-actions">
     <button class="btn" id="btn-import">⬆ Import .bib</button>
+    <button class="btn btn-notion" id="btn-notion">📥 Notion CSV</button>
     <button class="btn" id="btn-export">⬇ Export .bib</button>
   </div>
 </header>
@@ -628,13 +676,23 @@
       </div>
     </div>
 
-    <div class="sidebar-section" style="border-bottom:none; padding-bottom:0;">
-      <div class="sidebar-label" style="display:flex;justify-content:space-between;align-items:center;">
+    <div class="sidebar-section" style="border-bottom:none; padding-bottom:4px;">
+      <div class="sidebar-label">
         <span>タグ</span>
         <span id="tag-clear" style="cursor:pointer;color:var(--muted);font-size:10px;display:none;" onclick="clearTagFilter()">クリア</span>
       </div>
     </div>
-    <div class="tags-list" id="tags-list">
+    <div class="filter-list" id="tags-list">
+      <div style="color:var(--muted);font-size:12px;padding:8px;">読み込み中…</div>
+    </div>
+
+    <div class="sidebar-section" style="border-top:1px solid var(--border); border-bottom:none; padding-bottom:4px;">
+      <div class="sidebar-label">
+        <span>キーワード</span>
+        <span id="kw-clear" style="cursor:pointer;color:var(--muted);font-size:10px;display:none;" onclick="clearKwFilter()">クリア</span>
+      </div>
+    </div>
+    <div class="filter-list kw-list" id="keywords-list">
       <div style="color:var(--muted);font-size:12px;padding:8px;">読み込み中…</div>
     </div>
   </aside>
@@ -646,7 +704,6 @@
       <span class="count" id="list-count"></span>
     </div>
     <div class="entry-list" id="entry-list"></div>
-    <div class="pagination" id="pagination"></div>
   </div>
 
 </div>
@@ -662,7 +719,7 @@
   </div>
 </div>
 
-<!-- ── IMPORT MODAL ── -->
+<!-- ── IMPORT .bib MODAL ── -->
 <div class="modal-overlay" id="import-modal">
   <div class="modal">
     <h3>📂 .bib ファイルをインポート</h3>
@@ -678,6 +735,26 @@
   </div>
 </div>
 
+<!-- ── NOTION IMPORT MODAL ── -->
+<div class="modal-overlay" id="notion-modal">
+  <div class="modal">
+    <h3>📥 Notion CSV インポート</h3>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:14px;">
+      Notionからエクスポートした CSV ファイルを選択してください。<br>
+      タグ・キーワード・メモを既存の文献にマージします。
+    </p>
+    <div class="drop-zone" id="notion-drop-zone" onclick="document.getElementById('notion-file-input').click()">
+      クリックまたはドラッグ＆ドロップ<br>
+      <small style="font-size:11px;margin-top:4px;display:block;">既存データは上書きせず追記されます</small>
+    </div>
+    <input type="file" id="notion-file-input" accept=".csv" style="display:none">
+    <div class="import-result" id="notion-result"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+      <button class="btn" onclick="closeNotionModal()">閉じる</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── TOAST ── -->
 <div id="toast"></div>
 
@@ -688,22 +765,25 @@
 let state = {
   query: '',
   tags: [],        // active tag IDs (AND)
+  kws:  [],        // active keyword IDs (AND)
   yearFrom: null,
   yearTo: null,
   offset: 0,
-  limit: 50,
+  limit: 2000,     // load all at once
   total: 0,
   allTags: [],     // [{id, name, count}]
+  allKeywords: [], // [{id, name, count}]
   currentEntryId: null,
   debounceTimer: null,
+  sortCol: 'year',
+  sortDir: -1,     // -1 = desc, 1 = asc
 };
 
 // =====================================================================
 // Init
 // =====================================================================
 document.addEventListener('DOMContentLoaded', async () => {
-  await loadTags();
-  await loadStats();
+  await Promise.all([loadTags(), loadKeywords(), loadStats()]);
   await loadEntries();
   bindEvents();
 });
@@ -741,8 +821,9 @@ function bindEvents() {
   // Import / Export
   document.getElementById('btn-import').onclick = () => openImportModal();
   document.getElementById('btn-export').onclick = () => { window.location = '/api/export'; };
+  document.getElementById('btn-notion').onclick = () => openNotionModal();
 
-  // Drop zone
+  // .bib Drop zone
   const dz = document.getElementById('drop-zone');
   dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
   dz.addEventListener('dragleave', () => dz.classList.remove('over'));
@@ -750,10 +831,24 @@ function bindEvents() {
     e.preventDefault();
     dz.classList.remove('over');
     const f = e.dataTransfer.files[0];
-    if (f) importFile(f);
+    if (f) importBibFile(f);
   });
   document.getElementById('bib-file-input').addEventListener('change', e => {
-    if (e.target.files[0]) importFile(e.target.files[0]);
+    if (e.target.files[0]) importBibFile(e.target.files[0]);
+  });
+
+  // Notion CSV Drop zone
+  const ndz = document.getElementById('notion-drop-zone');
+  ndz.addEventListener('dragover', e => { e.preventDefault(); ndz.classList.add('over'); });
+  ndz.addEventListener('dragleave', () => ndz.classList.remove('over'));
+  ndz.addEventListener('drop', e => {
+    e.preventDefault();
+    ndz.classList.remove('over');
+    const f = e.dataTransfer.files[0];
+    if (f) importNotionFile(f);
+  });
+  document.getElementById('notion-file-input').addEventListener('change', e => {
+    if (e.target.files[0]) importNotionFile(e.target.files[0]);
   });
 }
 
@@ -789,7 +884,6 @@ function renderTags() {
       <span class="tag-count">${t.count}</span>
     </div>
   `).join('');
-
   document.getElementById('tag-clear').style.display = state.tags.length ? '' : 'none';
 }
 
@@ -810,6 +904,48 @@ function clearTagFilter() {
 }
 
 // =====================================================================
+// Load & render keywords
+// =====================================================================
+async function loadKeywords() {
+  const kws = await api('/api/keywords');
+  state.allKeywords = kws;
+  renderKeywords();
+}
+
+function renderKeywords() {
+  const el = document.getElementById('keywords-list');
+  if (!state.allKeywords.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px;">キーワードなし</div>';
+    return;
+  }
+  el.innerHTML = state.allKeywords.map(k => `
+    <div class="tag-item ${state.kws.includes(k.id) ? 'active-kw' : ''}"
+         onclick="toggleKw(${k.id})">
+      <div class="kw-dot"></div>
+      <span class="tag-name">${esc(k.name)}</span>
+      <span class="tag-count">${k.count}</span>
+    </div>
+  `).join('');
+  document.getElementById('kw-clear').style.display = state.kws.length ? '' : 'none';
+}
+
+function toggleKw(id) {
+  const idx = state.kws.indexOf(id);
+  if (idx === -1) state.kws.push(id);
+  else state.kws.splice(idx, 1);
+  state.offset = 0;
+  renderKeywords();
+  loadEntries();
+}
+
+function clearKwFilter() {
+  state.kws = [];
+  state.offset = 0;
+  renderKeywords();
+  loadEntries();
+}
+
+// =====================================================================
 // Load & render stats
 // =====================================================================
 async function loadStats() {
@@ -820,81 +956,108 @@ async function loadStats() {
 // =====================================================================
 // Load & render entries
 // =====================================================================
+// Cached entry rows for client-side sort
+let _cachedEntries = [];
+
 async function loadEntries() {
   const params = new URLSearchParams({
     q:      state.query,
     limit:  state.limit,
-    offset: state.offset,
+    offset: 0,
   });
   if (state.yearFrom) params.append('year_from', state.yearFrom);
   if (state.yearTo)   params.append('year_to',   state.yearTo);
   state.tags.forEach(tid => params.append('tag', tid));
+  state.kws.forEach(kid  => params.append('kw',  kid));
 
   document.getElementById('list-status').innerHTML = '<span class="spinner"></span>';
 
   const data = await api('/api/entries?' + params.toString());
   state.total = data.total;
+  _cachedEntries = data.entries;
 
+  renderTable();
+}
+
+function renderTable() {
   const el = document.getElementById('entry-list');
-  if (!data.entries.length) {
+
+  if (!_cachedEntries.length) {
     el.innerHTML = `<div style="text-align:center;padding:48px 0;color:var(--muted);">
       <div style="font-size:32px;margin-bottom:8px;">🔍</div>
       <div>文献が見つかりません</div>
     </div>`;
     document.getElementById('list-status').textContent = '0件';
     document.getElementById('list-count').textContent = '';
-    document.getElementById('pagination').innerHTML = '';
     return;
   }
 
-  el.innerHTML = data.entries.map(e => entryCardHTML(e)).join('');
-  document.getElementById('list-status').textContent = `${data.total.toLocaleString()} 件`;
-  document.getElementById('list-count').textContent =
-    `${state.offset + 1}–${Math.min(state.offset + state.limit, data.total)} 件表示`;
+  // Client-side sort
+  const sorted = [..._cachedEntries].sort((a, b) => {
+    let va = a[state.sortCol] ?? '';
+    let vb = b[state.sortCol] ?? '';
+    if (state.sortCol === 'year') { va = va || 0; vb = vb || 0; }
+    if (va < vb) return -state.sortDir;
+    if (va > vb) return  state.sortDir;
+    return 0;
+  });
 
-  renderPagination(data.total);
+  const cols = [
+    { key: 'year',       label: '年',     cls: 'td-year' },
+    { key: 'entry_type', label: '種別',   cls: 'td-type' },
+    { key: 'title',      label: 'タイトル', cls: 'td-title' },
+    { key: 'author',     label: '著者',   cls: 'td-authors' },
+    { key: 'tags',       label: 'タグ',   cls: 'td-tags', noSort: true },
+  ];
+
+  const thead = cols.map(c => {
+    const isSorted = state.sortCol === c.key;
+    const arrow = c.noSort ? '' : `<span class="sort-arrow">${isSorted ? (state.sortDir === 1 ? '▲' : '▼') : '▲'}</span>`;
+    const onclick = c.noSort ? '' : `onclick="sortBy('${c.key}')"`;
+    return `<th class="${isSorted ? 'sorted' : ''}" ${onclick}>${c.label}${arrow}</th>`;
+  }).join('');
+
+  const tbody = sorted.map(e => {
+    const authors = formatAuthors(e.author);
+    const tags    = (e.tags || []).map(t => `<span class="tag-badge">${esc(t.name)}</span>`).join('');
+    const arxiv   = e.eprint ? `<span class="arxiv-badge">arXiv</span>` : '';
+    const typeBadge = `<span class="type-badge">${esc(e.entry_type)}</span>`;
+
+    return `<tr onclick="openDetail(${e.id})" id="ec-${e.id}"
+                class="${state.currentEntryId === e.id ? 'active' : ''}">
+      <td class="td-year">${e.year || '?'}</td>
+      <td class="td-type">${typeBadge} ${arxiv}</td>
+      <td class="td-title"><div class="td-title-text">${esc(e.title || '(タイトルなし)')}</div></td>
+      <td class="td-authors">${esc(authors)}</td>
+      <td class="td-tags"><div class="td-tags-wrap">${tags}</div></td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML = `<table class="entry-table">
+    <thead><tr>${thead}</tr></thead>
+    <tbody>${tbody}</tbody>
+  </table>`;
+
+  document.getElementById('list-status').textContent = `${state.total.toLocaleString()} 件`;
+  document.getElementById('list-count').textContent =
+    state.total > _cachedEntries.length ? `（${_cachedEntries.length}件表示）` : '';
 }
 
-function entryCardHTML(e) {
-  const authors = formatAuthors(e.author);
-  const tags    = (e.tags || []).map(t => `<span class="tag-badge">${esc(t.name)}</span>`).join('');
-  const arxiv   = e.eprint ? `<span class="arxiv-badge">arXiv:${esc(e.eprint)}</span>` : '';
-
-  return `<div class="entry-card ${state.currentEntryId === e.id ? 'active' : ''}"
-              onclick="openDetail(${e.id})" id="ec-${e.id}">
-    <div class="entry-card-top">
-      <span class="entry-year">${e.year || '?'}</span>
-      <span class="entry-type-badge">${e.entry_type}</span>
-      ${arxiv}
-    </div>
-    <div class="entry-title">${esc(e.title || '(タイトルなし)')}</div>
-    <div class="entry-authors">${esc(authors)}</div>
-    ${tags ? `<div class="entry-tags">${tags}</div>` : ''}
-  </div>`;
+function sortBy(col) {
+  if (state.sortCol === col) {
+    state.sortDir *= -1;
+  } else {
+    state.sortCol = col;
+    state.sortDir = col === 'year' ? -1 : 1;
+  }
+  renderTable();
 }
 
 function formatAuthors(authorStr) {
   if (!authorStr) return '著者不明';
   const parts = authorStr.split(' | ');
-  if (parts.length <= 3) return parts.join(', ');
-  return parts.slice(0, 3).join(', ') + ` et al. (${parts.length}名)`;
-}
-
-function renderPagination(total) {
-  const pages = Math.ceil(total / state.limit);
-  const cur   = Math.floor(state.offset / state.limit);
-  if (pages <= 1) { document.getElementById('pagination').innerHTML = ''; return; }
-
-  let html = `<button class="btn" ${cur === 0 ? 'disabled' : ''} onclick="goPage(${cur-1})">← 前</button>`;
-  html += `<span style="color:var(--muted);font-size:13px;">${cur+1} / ${pages}</span>`;
-  html += `<button class="btn" ${cur >= pages-1 ? 'disabled' : ''} onclick="goPage(${cur+1})">次 →</button>`;
-  document.getElementById('pagination').innerHTML = html;
-}
-
-function goPage(p) {
-  state.offset = p * state.limit;
-  loadEntries();
-  document.getElementById('entry-list').scrollTo(0, 0);
+  if (parts.length <= 2) return parts.join(', ');
+  return parts[0] + ' et al.';
 }
 
 // =====================================================================
@@ -902,8 +1065,7 @@ function goPage(p) {
 // =====================================================================
 async function openDetail(entryId) {
   state.currentEntryId = entryId;
-  // Mark active card
-  document.querySelectorAll('.entry-card').forEach(c => c.classList.remove('active'));
+  document.querySelectorAll('#entry-list tr').forEach(c => c.classList.remove('active'));
   const card = document.getElementById(`ec-${entryId}`);
   if (card) card.classList.add('active');
 
@@ -918,13 +1080,12 @@ async function openDetail(entryId) {
 function closeDetail() {
   state.currentEntryId = null;
   document.getElementById('detail-panel').classList.remove('open');
-  document.querySelectorAll('.entry-card').forEach(c => c.classList.remove('active'));
+  document.querySelectorAll('#entry-list tr').forEach(c => c.classList.remove('active'));
 }
 
 function renderDetail(e) {
   document.getElementById('detail-heading').textContent = e.title || e.cite_key;
 
-  // arXiv URL
   const arxivUrl = e.eprint ? `https://arxiv.org/abs/${e.eprint}` : null;
   const linkUrl  = e.doi ? `https://doi.org/${e.doi}` : (e.url || arxivUrl || null);
 
@@ -943,11 +1104,8 @@ function renderDetail(e) {
     `<div><span class="meta-label">${l}：</span>${v}</div>`
   ).join('');
 
-  // Tags
   const currentTagNames = (e.tags || []).map(t => t.name);
-  const currentKws = (e.keywords || []).map(k => k.keyword);
-
-  // Citations
+  const currentKws = (e.keywords || []).map(k => k.name);
   const citsHTML = (e.citations || []).map(c => citationCardHTML(c)).join('');
 
   document.getElementById('detail-body').innerHTML = `
@@ -983,6 +1141,7 @@ function renderDetail(e) {
         <div id="kw-chips"></div>
         <input class="kw-input" id="kw-input" placeholder="キーワードを追加（Enterで確定）…" autocomplete="off">
       </div>
+      <div class="autocomplete" id="kw-autocomplete" style="display:none;"></div>
     </div>
 
     <!-- Reading note -->
@@ -1012,7 +1171,6 @@ function renderDetail(e) {
 
   `;
 
-  // Init tag editor
   initTagEditor(e.id, currentTagNames);
   initKwEditor(e.id, currentKws);
 }
@@ -1055,19 +1213,17 @@ function onTagInput(e) {
     .slice(0, 8);
 
   if (!matches.length) { hideTagAC(); return; }
-  ac.innerHTML = matches.map((t, i) =>
+  ac.innerHTML = matches.map(t =>
     `<div class="autocomplete-item" data-name="${esc(t.name)}"
           onmousedown="selectTagAC('${esc(t.name)}')">${esc(t.name)}</div>`
   ).join('');
   ac.style.display = '';
-  // Position below editor
   const ed = document.getElementById('tag-editor');
   const rect = ed.getBoundingClientRect();
   const panelRect = document.getElementById('detail-panel').getBoundingClientRect();
   ac.style.left = (rect.left - panelRect.left) + 'px';
   ac.style.top  = (rect.bottom - panelRect.top) + 'px';
   ac.style.width = rect.width + 'px';
-  document.getElementById('detail-panel').style.position = 'fixed';
 }
 
 function hideTagAC() {
@@ -1121,7 +1277,7 @@ async function saveTags() {
 }
 
 // =====================================================================
-// Keyword editor
+// Keyword editor (with autocomplete from global list)
 // =====================================================================
 let _kwState = { entryId: null, kws: [] };
 
@@ -1129,7 +1285,9 @@ function initKwEditor(entryId, kws) {
   _kwState = { entryId, kws: [...kws] };
   renderKwChips();
   const inp = document.getElementById('kw-input');
+  inp.addEventListener('input', onKwInput);
   inp.addEventListener('keydown', onKwKeydown);
+  inp.addEventListener('blur', () => setTimeout(hideKwAC, 150));
 }
 
 function renderKwChips() {
@@ -1146,6 +1304,43 @@ function removeKw(idx) {
   saveKwDebounced();
 }
 
+function onKwInput(e) {
+  const q = e.target.value.toLowerCase();
+  const ac = document.getElementById('kw-autocomplete');
+  if (!q) { hideKwAC(); return; }
+
+  const matches = state.allKeywords
+    .filter(k => k.name.toLowerCase().includes(q) && !_kwState.kws.includes(k.name))
+    .slice(0, 8);
+
+  if (!matches.length) { hideKwAC(); return; }
+  ac.innerHTML = matches.map(k =>
+    `<div class="autocomplete-item" onmousedown="selectKwAC('${esc(k.name)}')">${esc(k.name)}</div>`
+  ).join('');
+  ac.style.display = '';
+  const wrap = document.getElementById('kw-wrap');
+  const rect = wrap.getBoundingClientRect();
+  const panelRect = document.getElementById('detail-panel').getBoundingClientRect();
+  ac.style.left = (rect.left - panelRect.left) + 'px';
+  ac.style.top  = (rect.bottom - panelRect.top) + 'px';
+  ac.style.width = rect.width + 'px';
+}
+
+function hideKwAC() {
+  const ac = document.getElementById('kw-autocomplete');
+  if (ac) ac.style.display = 'none';
+}
+
+function selectKwAC(name) {
+  if (!_kwState.kws.includes(name)) {
+    _kwState.kws.push(name);
+    renderKwChips();
+    saveKwDebounced();
+  }
+  document.getElementById('kw-input').value = '';
+  hideKwAC();
+}
+
 function onKwKeydown(e) {
   const inp = e.target;
   if (e.key === 'Enter' || e.key === ',') {
@@ -1157,6 +1352,7 @@ function onKwKeydown(e) {
       saveKwDebounced();
     }
     inp.value = '';
+    hideKwAC();
   } else if (e.key === 'Backspace' && !inp.value && _kwState.kws.length) {
     _kwState.kws.pop();
     renderKwChips();
@@ -1176,6 +1372,7 @@ async function saveKws() {
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({ keywords: _kwState.kws }),
   });
+  await loadKeywords();
   showToast('キーワードを保存しました', 'ok');
 }
 
@@ -1199,7 +1396,7 @@ function citationCardHTML(c) {
   const src = [c.source_cite_key, c.source_title].filter(Boolean).join(' / ');
   return `<div class="citation-card" id="cit-${c.id}">
     ${src ? `<div class="citation-source">出典：${esc(src)}</div>` : ''}
-    <div style="font-size:13px;">${esc(c.content || '')}</div>
+    <div style="font-size:13px;white-space:pre-wrap;">${esc(c.content || '')}</div>
     <div class="citation-actions">
       <button class="btn" style="font-size:11px;" onclick="editCitationForm(${c.id},'${esc2(c.source_cite_key)}','${esc2(c.source_title)}','${esc2(c.content)}')">編集</button>
       <button class="btn btn-danger" style="font-size:11px;" onclick="deleteCitation(${c.id},${state.currentEntryId})">削除</button>
@@ -1231,13 +1428,12 @@ async function submitNewCitation(entryId) {
   const content = document.getElementById('cit-content').value.trim();
   if (!content) { showToast('内容を入力してください', 'err'); return; }
 
-  const res = await api(`/api/entries/${entryId}/citations`, {
+  await api(`/api/entries/${entryId}/citations`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({ source_cite_key: key, source_title: title, content }),
   });
   document.getElementById('cit-form-new').remove();
-  // Reload detail
   openDetail(entryId);
   showToast('言及を追加しました', 'ok');
 }
@@ -1284,7 +1480,7 @@ function copyBibtex() {
 }
 
 // =====================================================================
-// Import modal
+// Import .bib modal
 // =====================================================================
 function openImportModal() {
   document.getElementById('import-modal').classList.add('open');
@@ -1299,19 +1495,55 @@ function closeImportModal() {
   loadStats();
 }
 
-async function importFile(file) {
+async function importBibFile(file) {
   const fd = new FormData();
   fd.append('file', file);
-  document.getElementById('import-result').style.display = '';
-  document.getElementById('import-result').innerHTML = '<span class="spinner"></span> インポート中…';
+  const res = document.getElementById('import-result');
+  res.style.display = '';
+  res.innerHTML = '<span class="spinner"></span> インポート中…';
   try {
-    const res = await fetch('/api/import', { method: 'POST', body: fd });
-    const data = await res.json();
-    document.getElementById('import-result').innerHTML =
-      `✅ 追加: <b>${data.added}</b>件　更新: <b>${data.updated}</b>件　スキップ: <b>${data.skipped}</b>件`;
+    const data = await fetch('/api/import', { method: 'POST', body: fd }).then(r => r.json());
+    res.innerHTML = `✅ 追加: <b>${data.added}</b>件　更新: <b>${data.updated}</b>件　スキップ: <b>${data.skipped}</b>件`;
     showToast('インポート完了', 'ok');
   } catch (err) {
-    document.getElementById('import-result').innerHTML = '❌ インポートに失敗しました: ' + err.message;
+    res.innerHTML = '❌ インポートに失敗しました: ' + err.message;
+    showToast('インポート失敗', 'err');
+  }
+}
+
+// =====================================================================
+// Notion CSV import modal
+// =====================================================================
+function openNotionModal() {
+  document.getElementById('notion-modal').classList.add('open');
+  document.getElementById('notion-result').style.display = 'none';
+  document.getElementById('notion-file-input').value = '';
+}
+
+function closeNotionModal() {
+  document.getElementById('notion-modal').classList.remove('open');
+  loadEntries();
+  loadTags();
+  loadKeywords();
+  loadStats();
+}
+
+async function importNotionFile(file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = document.getElementById('notion-result');
+  res.style.display = '';
+  res.innerHTML = '<span class="spinner"></span> インポート中…';
+  try {
+    const data = await fetch('/api/notion-import', { method: 'POST', body: fd }).then(r => r.json());
+    let html = `✅ マッチ: <b>${data.matched}</b>件　未マッチ: <b>${data.not_found}</b>件`;
+    if (data.errors && data.errors.length) {
+      html += `<div class="notion-errors">${data.errors.map(e => esc(e)).join('<br>')}</div>`;
+    }
+    res.innerHTML = html;
+    showToast('Notionインポート完了', 'ok');
+  } catch (err) {
+    res.innerHTML = '❌ インポートに失敗しました: ' + err.message;
     showToast('インポート失敗', 'err');
   }
 }
@@ -1338,7 +1570,6 @@ function esc(s) {
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 function esc2(s) {
-  // For embedding in single-quoted JS attribute
   if (s == null) return '';
   return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,' ');
 }
