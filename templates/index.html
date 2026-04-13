@@ -214,31 +214,15 @@
   .entry-list {
     flex: 1;
     overflow-y: auto;
-    padding: 0;
+    padding: 8px;
   }
 
-  /* ── Table view ── */
-  .entry-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13px;
-  }
-  .entry-table thead {
-    position: sticky;
-    top: 0;
-    z-index: 10;
-    background: var(--bg3);
-  }
-  .entry-table th {
-    padding: 8px 12px;
-    text-align: left;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: .06em;
-    text-transform: uppercase;
-    color: var(--muted);
-    border-bottom: 1px solid var(--border);
-    white-space: nowrap;
+  .entry-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    margin-bottom: 6px;
     cursor: pointer;
     user-select: none;
   }
@@ -260,11 +244,13 @@
     vertical-align: middle;
     line-height: 1.4;
   }
-  .td-year {
-    width: 52px;
+  .entry-year {
+    font-size: 12px;
     color: var(--yellow);
     font-weight: 700;
     white-space: nowrap;
+    font-family: var(--font-mono);
+    font-size: 12px;
   }
   .td-type {
     width: 70px;
@@ -317,7 +303,16 @@
     background: color-mix(in srgb, var(--red) 15%, transparent);
     color: #e08080;
     border: 1px solid color-mix(in srgb, var(--red) 30%, transparent);
-    white-space: nowrap;
+  }
+
+  .pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
   }
 
   /* ── Detail panel ── */
@@ -420,9 +415,9 @@
     border: 1px solid var(--border);
     border-radius: var(--radius);
     z-index: 200;
-    max-height: 180px;
+    max-height: 240px;
     overflow-y: auto;
-    box-shadow: 0 8px 24px rgba(0,0,0,.4);
+    box-shadow: 0 8px 24px rgba(0,0,0,.5);
   }
   .autocomplete-item {
     padding: 7px 12px;
@@ -629,14 +624,9 @@
     margin-top: 12px;
     display: none;
   }
-  .notion-errors {
-    margin-top: 8px;
-    max-height: 120px;
-    overflow-y: auto;
-    font-size: 11px;
-    color: var(--muted);
-    font-family: var(--font-mono);
-  }
+
+  /* Responsive: when detail panel is open, shrink list */
+  .detail-panel.open ~ * { /* not needed; overlay approach */ }
 </style>
 </head>
 <body>
@@ -651,9 +641,11 @@
     <input id="search" type="text" placeholder="タイトル・著者・キーワード・メモを検索…（/ でフォーカス）">
   </div>
   <div class="header-actions">
+    <button class="btn btn-primary" id="btn-add">＋ 文献を追加</button>
     <button class="btn" id="btn-import">⬆ Import .bib</button>
     <button class="btn btn-notion" id="btn-notion">📥 Notion CSV</button>
     <button class="btn" id="btn-export">⬇ Export .bib</button>
+    <button class="btn" id="btn-dupes" title="重複を検出する">⚠ 重複チェック</button>
   </div>
 </header>
 
@@ -682,17 +674,7 @@
         <span id="tag-clear" style="cursor:pointer;color:var(--muted);font-size:10px;display:none;" onclick="clearTagFilter()">クリア</span>
       </div>
     </div>
-    <div class="filter-list" id="tags-list">
-      <div style="color:var(--muted);font-size:12px;padding:8px;">読み込み中…</div>
-    </div>
-
-    <div class="sidebar-section" style="border-top:1px solid var(--border); border-bottom:none; padding-bottom:4px;">
-      <div class="sidebar-label">
-        <span>キーワード</span>
-        <span id="kw-clear" style="cursor:pointer;color:var(--muted);font-size:10px;display:none;" onclick="clearKwFilter()">クリア</span>
-      </div>
-    </div>
-    <div class="filter-list kw-list" id="keywords-list">
+    <div class="tags-list" id="tags-list">
       <div style="color:var(--muted);font-size:12px;padding:8px;">読み込み中…</div>
     </div>
   </aside>
@@ -713,6 +695,8 @@
   <div class="detail-header">
     <button class="btn" id="detail-close" onclick="closeDetail()">✕</button>
     <h2 id="detail-heading">文献詳細</h2>
+    <button class="btn" id="btn-edit-meta" onclick="toggleMetaEdit()" title="書誌情報を編集">✏ 編集</button>
+    <button class="btn btn-danger" id="btn-delete-entry" onclick="deleteCurrentEntry()" title="この文献を削除">🗑</button>
   </div>
   <div class="detail-body" id="detail-body">
     <!-- Filled dynamically -->
@@ -731,26 +715,6 @@
     <div class="import-result" id="import-result"></div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
       <button class="btn" onclick="closeImportModal()">閉じる</button>
-    </div>
-  </div>
-</div>
-
-<!-- ── NOTION IMPORT MODAL ── -->
-<div class="modal-overlay" id="notion-modal">
-  <div class="modal">
-    <h3>📥 Notion CSV インポート</h3>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:14px;">
-      Notionからエクスポートした CSV ファイルを選択してください。<br>
-      タグ・キーワード・メモを既存の文献にマージします。
-    </p>
-    <div class="drop-zone" id="notion-drop-zone" onclick="document.getElementById('notion-file-input').click()">
-      クリックまたはドラッグ＆ドロップ<br>
-      <small style="font-size:11px;margin-top:4px;display:block;">既存データは上書きせず追記されます</small>
-    </div>
-    <input type="file" id="notion-file-input" accept=".csv" style="display:none">
-    <div class="import-result" id="notion-result"></div>
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
-      <button class="btn" onclick="closeNotionModal()">閉じる</button>
     </div>
   </div>
 </div>
@@ -775,8 +739,6 @@ let state = {
   allKeywords: [], // [{id, name, count}]
   currentEntryId: null,
   debounceTimer: null,
-  sortCol: 'year',
-  sortDir: -1,     // -1 = desc, 1 = asc
 };
 
 // =====================================================================
@@ -815,13 +777,13 @@ function bindEvents() {
       e.preventDefault();
       document.getElementById('search').focus();
     }
-    if (e.key === 'Escape') closeDetail();
+    if (e.key === 'Escape') { e.preventDefault(); closeDetail(); }
   });
 
   // Import / Export
+  document.getElementById('btn-add').onclick    = () => openAddModal();
   document.getElementById('btn-import').onclick = () => openImportModal();
   document.getElementById('btn-export').onclick = () => { window.location = '/api/export'; };
-  document.getElementById('btn-notion').onclick = () => openNotionModal();
 
   // .bib Drop zone
   const dz = document.getElementById('drop-zone');
@@ -956,9 +918,6 @@ async function loadStats() {
 // =====================================================================
 // Load & render entries
 // =====================================================================
-// Cached entry rows for client-side sort
-let _cachedEntries = [];
-
 async function loadEntries() {
   const params = new URLSearchParams({
     q:      state.query,
@@ -974,7 +933,6 @@ async function loadEntries() {
 
   const data = await api('/api/entries?' + params.toString());
   state.total = data.total;
-  _cachedEntries = data.entries;
 
   renderTable();
 }
@@ -992,78 +950,63 @@ function renderTable() {
     return;
   }
 
-  // Client-side sort
-  const sorted = [..._cachedEntries].sort((a, b) => {
-    let va = a[state.sortCol] ?? '';
-    let vb = b[state.sortCol] ?? '';
-    if (state.sortCol === 'year') { va = va || 0; vb = vb || 0; }
-    if (va < vb) return -state.sortDir;
-    if (va > vb) return  state.sortDir;
-    return 0;
-  });
-
-  const cols = [
-    { key: 'year',       label: '年',     cls: 'td-year' },
-    { key: 'entry_type', label: '種別',   cls: 'td-type' },
-    { key: 'title',      label: 'タイトル', cls: 'td-title' },
-    { key: 'author',     label: '著者',   cls: 'td-authors' },
-    { key: 'tags',       label: 'タグ',   cls: 'td-tags', noSort: true },
-  ];
-
-  const thead = cols.map(c => {
-    const isSorted = state.sortCol === c.key;
-    const arrow = c.noSort ? '' : `<span class="sort-arrow">${isSorted ? (state.sortDir === 1 ? '▲' : '▼') : '▲'}</span>`;
-    const onclick = c.noSort ? '' : `onclick="sortBy('${c.key}')"`;
-    return `<th class="${isSorted ? 'sorted' : ''}" ${onclick}>${c.label}${arrow}</th>`;
-  }).join('');
-
-  const tbody = sorted.map(e => {
-    const authors = formatAuthors(e.author);
-    const tags    = (e.tags || []).map(t => `<span class="tag-badge">${esc(t.name)}</span>`).join('');
-    const arxiv   = e.eprint ? `<span class="arxiv-badge">arXiv</span>` : '';
-    const typeBadge = `<span class="type-badge">${esc(e.entry_type)}</span>`;
-
-    return `<tr onclick="openDetail(${e.id})" id="ec-${e.id}"
-                class="${state.currentEntryId === e.id ? 'active' : ''}">
-      <td class="td-year">${e.year || '?'}</td>
-      <td class="td-type">${typeBadge} ${arxiv}</td>
-      <td class="td-title"><div class="td-title-text">${esc(e.title || '(タイトルなし)')}</div></td>
-      <td class="td-authors">${esc(authors)}</td>
-      <td class="td-tags"><div class="td-tags-wrap">${tags}</div></td>
-    </tr>`;
-  }).join('');
-
-  el.innerHTML = `<table class="entry-table">
-    <thead><tr>${thead}</tr></thead>
-    <tbody>${tbody}</tbody>
-  </table>`;
-
-  document.getElementById('list-status').textContent = `${state.total.toLocaleString()} 件`;
+  el.innerHTML = data.entries.map(e => entryCardHTML(e)).join('');
+  document.getElementById('list-status').textContent = `${data.total.toLocaleString()} 件`;
   document.getElementById('list-count').textContent =
-    state.total > _cachedEntries.length ? `（${_cachedEntries.length}件表示）` : '';
+    `${state.offset + 1}–${Math.min(state.offset + state.limit, data.total)} 件表示`;
+
+  renderPagination(data.total);
 }
 
-function sortBy(col) {
-  if (state.sortCol === col) {
-    state.sortDir *= -1;
-  } else {
-    state.sortCol = col;
-    state.sortDir = col === 'year' ? -1 : 1;
-  }
-  renderTable();
+function entryCardHTML(e) {
+  const authors = formatAuthors(e.author);
+  const tags    = (e.tags || []).map(t => `<span class="tag-badge">${esc(t.name)}</span>`).join('');
+  const arxiv   = e.eprint ? `<span class="arxiv-badge">arXiv:${esc(e.eprint)}</span>` : '';
+
+  return `<div class="entry-card ${state.currentEntryId === e.id ? 'active' : ''}"
+              onclick="openDetail(${e.id})" id="ec-${e.id}">
+    <div class="entry-card-top">
+      <span class="entry-year">${e.year || '?'}</span>
+      <span class="entry-type-badge">${e.entry_type}</span>
+      ${arxiv}
+    </div>
+    <div class="entry-title">${esc(e.title || '(タイトルなし)')}</div>
+    <div class="entry-authors">${esc(authors)}</div>
+    ${tags ? `<div class="entry-tags">${tags}</div>` : ''}
+  </div>`;
 }
 
 function formatAuthors(authorStr) {
   if (!authorStr) return '著者不明';
   const parts = authorStr.split(' | ');
-  if (parts.length <= 2) return parts.join(', ');
-  return parts[0] + ' et al.';
+  if (parts.length <= 3) return parts.join(', ');
+  return parts.slice(0, 3).join(', ') + ` et al. (${parts.length}名)`;
+}
+
+function renderPagination(total) {
+  const pages = Math.ceil(total / state.limit);
+  const cur   = Math.floor(state.offset / state.limit);
+  if (pages <= 1) { document.getElementById('pagination').innerHTML = ''; return; }
+
+  let html = `<button class="btn" ${cur === 0 ? 'disabled' : ''} onclick="goPage(${cur-1})">← 前</button>`;
+  html += `<span style="color:var(--muted);font-size:13px;">${cur+1} / ${pages}</span>`;
+  html += `<button class="btn" ${cur >= pages-1 ? 'disabled' : ''} onclick="goPage(${cur+1})">次 →</button>`;
+  document.getElementById('pagination').innerHTML = html;
+}
+
+function goPage(p) {
+  state.offset = p * state.limit;
+  loadEntries();
+  document.getElementById('entry-list').scrollTo(0, 0);
 }
 
 // =====================================================================
 // Detail panel
 // =====================================================================
 async function openDetail(entryId) {
+  // flush any unsaved note BEFORE destroying the current textarea
+  await flushNote();
+
   state.currentEntryId = entryId;
   document.querySelectorAll('#entry-list tr').forEach(c => c.classList.remove('active'));
   const card = document.getElementById(`ec-${entryId}`);
@@ -1077,7 +1020,8 @@ async function openDetail(entryId) {
   renderDetail(entry);
 }
 
-function closeDetail() {
+async function closeDetail() {
+  await flushNote();   // 未保存の変更を即時保存してから閉じる
   state.currentEntryId = null;
   document.getElementById('detail-panel').classList.remove('open');
   document.querySelectorAll('#entry-list tr').forEach(c => c.classList.remove('active'));
@@ -1090,14 +1034,14 @@ function renderDetail(e) {
   const linkUrl  = e.doi ? `https://doi.org/${e.doi}` : (e.url || arxivUrl || null);
 
   const metaRows = [
-    ['著者',    e.author || '–'],
-    ['年',      e.year ? `${e.year}${e.month ? ' ' + e.month : ''}` : '–'],
-    ['掲載誌',  e.journal || '–'],
-    ['巻/号',   [e.volume, e.number].filter(Boolean).join(' / ') || '–'],
-    ['ページ',  e.pages || '–'],
-    ['DOI',     e.doi ? `<a href="https://doi.org/${e.doi}" target="_blank">${esc(e.doi)}</a>` : '–'],
-    ['arXiv',   e.eprint ? `<a href="https://arxiv.org/abs/${e.eprint}" target="_blank">${esc(e.eprint)}</a>` : '–'],
-    ['URL',     e.url ? `<a href="${esc(e.url)}" target="_blank">リンク</a>` : '–'],
+    ['著者',   e.author  || '–'],
+    ['年',     e.year    ? `${e.year}${e.month ? ' ' + e.month : ''}` : '–'],
+    ['掲載誌', e.journal || '–'],
+    ['巻/号',  [e.volume, e.number].filter(Boolean).join(' / ') || '–'],
+    ['ページ', e.pages   || '–'],
+    ['DOI',    e.doi    ? `<a href="https://doi.org/${e.doi}" target="_blank">${esc(e.doi)}</a>` : '–'],
+    ['arXiv',  e.eprint ? `<a href="https://arxiv.org/abs/${e.eprint}" target="_blank">${esc(e.eprint)}</a>` : '–'],
+    ['URL',    e.url    ? `<a href="${esc(e.url)}" target="_blank">リンク</a>` : '–'],
   ];
 
   const metaHTML = metaRows.filter(([,v]) => v && v !== '–').map(([l,v]) =>
@@ -1108,18 +1052,90 @@ function renderDetail(e) {
   const currentKws = (e.keywords || []).map(k => k.name);
   const citsHTML = (e.citations || []).map(c => citationCardHTML(c)).join('');
 
+  const entryTypeOptions = ['article','misc','book','inproceedings','incollection',
+    'phdthesis','mastersthesis','unpublished','inbook']
+    .map(t => `<option value="${t}" ${e.entry_type===t?'selected':''}>${t}</option>`)
+    .join('');
+
   document.getElementById('detail-body').innerHTML = `
 
-    <!-- Meta -->
-    <div class="detail-section">
+    <!-- ── Meta view ── -->
+    <div class="detail-section" id="meta-view-section">
       <div class="detail-section-title">📄 書誌情報
         ${linkUrl ? `<a href="${esc(linkUrl)}" target="_blank" style="color:var(--accent);font-size:11px;font-weight:400;margin-left:auto;">外部リンク ↗</a>` : ''}
       </div>
-      <div class="detail-meta">${metaHTML}</div>
+      <div class="detail-meta" id="meta-view">${metaHTML}</div>
     </div>
 
-    ${e.abstract ? `
-    <div class="detail-section">
+    <!-- ── Meta edit form (hidden by default) ── -->
+    <div class="detail-section" id="meta-edit-section" style="display:none;">
+      <div class="detail-section-title">✏ 書誌情報を編集</div>
+      <div class="meta-edit-form open" id="meta-edit-form">
+        <div class="meta-edit-row">
+          <label>種別</label>
+          <select id="ef-entry-type">${entryTypeOptions}</select>
+        </div>
+        <div class="meta-edit-row">
+          <label>cite key</label>
+          <input id="ef-cite-key" value="${esc(e.cite_key||'')}">
+        </div>
+        <div class="meta-edit-row">
+          <label>タイトル</label>
+          <input id="ef-title" value="${esc(e.title||'')}">
+        </div>
+        <div class="meta-edit-row">
+          <label>著者</label>
+          <input id="ef-author" value="${esc(e.author||'')}" placeholder="Last, First and Last2, First2">
+        </div>
+        <div class="meta-edit-row">
+          <label>年</label>
+          <input id="ef-year" type="number" value="${esc(e.year||'')}" min="1000" max="2100" style="width:90px;">
+        </div>
+        <div class="meta-edit-row">
+          <label>月</label>
+          <input id="ef-month" value="${esc(e.month||'')}" placeholder="jan / 01 etc.">
+        </div>
+        <div class="meta-edit-row">
+          <label>掲載誌</label>
+          <input id="ef-journal" value="${esc(e.journal||'')}">
+        </div>
+        <div class="meta-edit-row">
+          <label>巻</label>
+          <input id="ef-volume" value="${esc(e.volume||'')}">
+        </div>
+        <div class="meta-edit-row">
+          <label>号</label>
+          <input id="ef-number" value="${esc(e.number||'')}">
+        </div>
+        <div class="meta-edit-row">
+          <label>ページ</label>
+          <input id="ef-pages" value="${esc(e.pages||'')}">
+        </div>
+        <div class="meta-edit-row">
+          <label>DOI</label>
+          <input id="ef-doi" value="${esc(e.doi||'')}">
+        </div>
+        <div class="meta-edit-row">
+          <label>arXiv</label>
+          <input id="ef-eprint" value="${esc(e.eprint||'')}" placeholder="2301.12345">
+        </div>
+        <div class="meta-edit-row">
+          <label>URL</label>
+          <input id="ef-url" value="${esc(e.url||'')}">
+        </div>
+        <div class="meta-edit-row" style="align-items:start;">
+          <label style="padding-top:6px;">Abstract</label>
+          <textarea id="ef-abstract" rows="4">${esc(e.abstract||'')}</textarea>
+        </div>
+        <div class="meta-edit-actions">
+          <button class="btn" onclick="toggleMetaEdit()">キャンセル</button>
+          <button class="btn btn-primary" onclick="saveMetaEdit(${e.id})">保存</button>
+        </div>
+      </div>
+    </div>
+
+    ${e.abstract && !document.getElementById('meta-edit-section')?.style.display ? `
+    <div class="detail-section" id="abstract-section">
       <div class="detail-section-title">📝 アブストラクト</div>
       <div class="abstract-text">${esc(e.abstract)}</div>
     </div>` : ''}
@@ -1146,10 +1162,12 @@ function renderDetail(e) {
 
     <!-- Reading note -->
     <div class="detail-section">
-      <div class="detail-section-title">📖 実際に何が書かれていたか</div>
+      <div class="detail-section-title">
+        📖 実際に何が書かれていたか
+        <span id="note-save-status" style="font-size:11px;font-weight:400;margin-left:auto;color:var(--muted);"></span>
+      </div>
       <textarea class="note-area" id="reading-note" rows="5"
-        placeholder="自分の読書メモ…"
-        onblur="saveReadingNote(${e.id})">${esc(e.reading_note?.content || '')}</textarea>
+        placeholder="自分の読書メモ…">${esc(e.reading_note?.content || '')}</textarea>
     </div>
 
     <!-- Citations in other papers -->
@@ -1173,20 +1191,163 @@ function renderDetail(e) {
 
   initTagEditor(e.id, currentTagNames);
   initKwEditor(e.id, currentKws);
+  initNoteEditor(e.id, e.reading_note?.content || '');
+}
+
+// =====================================================================
+// Meta edit
+// =====================================================================
+function toggleMetaEdit() {
+  const viewSec = document.getElementById('meta-view-section');
+  const editSec = document.getElementById('meta-edit-section');
+  const absSec  = document.getElementById('abstract-section');
+  const btn     = document.getElementById('btn-edit-meta');
+  if (!viewSec || !editSec) return;
+
+  const editing = editSec.style.display !== 'none';
+  viewSec.style.display = editing ? '' : 'none';
+  editSec.style.display = editing ? 'none' : '';
+  if (absSec) absSec.style.display = editing ? '' : 'none';
+  if (btn) btn.textContent = editing ? '✏ 編集' : '✕ 編集中';
+
+  if (!editing) document.getElementById('ef-title')?.focus();
+}
+
+async function saveMetaEdit(entryId) {
+  const val = id => document.getElementById(id)?.value.trim() ?? '';
+  const fields = {
+    entry_type: val('ef-entry-type'),
+    cite_key:   val('ef-cite-key'),
+    title:      val('ef-title'),
+    author:     val('ef-author'),
+    year:       val('ef-year') ? parseInt(val('ef-year')) : null,
+    month:      val('ef-month'),
+    journal:    val('ef-journal'),
+    volume:     val('ef-volume'),
+    number:     val('ef-number'),
+    pages:      val('ef-pages'),
+    doi:        val('ef-doi'),
+    eprint:     val('ef-eprint'),
+    url:        val('ef-url'),
+    abstract:   document.getElementById('ef-abstract')?.value.trim() ?? '',
+  };
+
+  try {
+    const updated = await api(`/api/entries/${entryId}`, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(fields),
+    });
+    // Re-render detail with returned data
+    renderDetail(updated);
+    // Re-render table row title/year in background
+    const idx = _cachedEntries.findIndex(e => e.id === entryId);
+    if (idx !== -1) {
+      _cachedEntries[idx].title  = updated.title;
+      _cachedEntries[idx].author = updated.author;
+      _cachedEntries[idx].year   = updated.year;
+      _cachedEntries[idx].eprint = updated.eprint;
+      renderTable();
+    }
+    showToast('書誌情報を保存しました', 'ok');
+    // Refresh stats in case cite_key changed
+    loadStats();
+  } catch(e) {
+    showToast('保存に失敗しました', 'err');
+  }
+}
+
+// =====================================================================
+// Entry delete
+// =====================================================================
+async function deleteCurrentEntry() {
+  if (!state.currentEntryId) return;
+  const title = document.getElementById('detail-heading')?.textContent || '(不明)';
+  if (!confirm(`「${title}」を削除しますか？\nこの操作は取り消せません。`)) return;
+
+  await api(`/api/entries/${state.currentEntryId}`, { method: 'DELETE' });
+  // Remove from cache and re-render
+  _cachedEntries = _cachedEntries.filter(e => e.id !== state.currentEntryId);
+  state.total = Math.max(0, state.total - 1);
+  renderTable();
+  closeDetail();
+  loadStats();
+  showToast('文献を削除しました', 'ok');
+}
+
+// =====================================================================
+// Generic autocomplete dropdown helper
+// =====================================================================
+// Used by both tag and keyword editors.
+// ac     : { acId, anchorId, items: [{name}], selectedNames: [], acIdx, onSelect }
+// =====================================================================
+
+function _showAC({ acId, anchorId, items, acIdx }) {
+  const ac = document.getElementById(acId);
+  if (!ac) return;
+  if (!items.length) { _hideAC(acId); return; }
+
+  ac.innerHTML = items.map((item, i) =>
+    `<div class="autocomplete-item${i === acIdx ? ' hl' : ''}"
+          data-idx="${i}"
+          onmousedown="event.preventDefault()"
+          onclick="_acItemClick('${acId}','${esc(item.name)}')"
+     >${esc(item.name)}</div>`
+  ).join('');
+
+  // Position below the anchor element
+  const anchor = document.getElementById(anchorId);
+  const panel  = document.getElementById('detail-panel');
+  if (anchor && panel) {
+    const ar = anchor.getBoundingClientRect();
+    const pr = panel.getBoundingClientRect();
+    ac.style.left  = (ar.left  - pr.left) + 'px';
+    ac.style.top   = (ar.bottom - pr.top) + 'px';
+    ac.style.width = ar.width + 'px';
+  }
+  ac.style.display = '';
+
+  // Scroll highlighted item into view
+  const hl = ac.querySelector('.hl');
+  if (hl) hl.scrollIntoView({ block: 'nearest' });
+}
+
+function _hideAC(acId) {
+  const ac = document.getElementById(acId);
+  if (ac) ac.style.display = 'none';
+}
+
+// Called by onclick on each item (set in _showAC)
+function _acItemClick(acId, name) {
+  if (acId === 'tag-autocomplete') selectTagAC(name);
+  else if (acId === 'kw-autocomplete') selectKwAC(name);
 }
 
 // =====================================================================
 // Tag editor
 // =====================================================================
-let _tagState = { entryId: null, names: [], acIdx: -1 };
+let _tagState = { entryId: null, names: [], acIdx: -1, acItems: [] };
 
 function initTagEditor(entryId, names) {
-  _tagState = { entryId, names: [...names], acIdx: -1 };
+  _tagState = { entryId, names: [...names], acIdx: -1, acItems: [] };
   renderTagChips();
   const inp = document.getElementById('tag-input');
-  inp.addEventListener('input', onTagInput);
+  inp.addEventListener('focus', () => _refreshTagAC());
+  inp.addEventListener('input', () => _refreshTagAC());
   inp.addEventListener('keydown', onTagKeydown);
-  inp.addEventListener('blur', () => setTimeout(hideTagAC, 150));
+  inp.addEventListener('blur', () => setTimeout(() => _hideAC('tag-autocomplete'), 150));
+}
+
+function _refreshTagAC() {
+  const inp = document.getElementById('tag-input');
+  if (!inp) return;
+  const q = inp.value.toLowerCase();
+  _tagState.acItems = state.allTags
+    .filter(t => !_tagState.names.includes(t.name))
+    .filter(t => !q || t.name.toLowerCase().includes(q));
+  _tagState.acIdx = -1;
+  _showAC({ acId: 'tag-autocomplete', anchorId: 'tag-editor',
+            items: _tagState.acItems, acIdx: _tagState.acIdx });
 }
 
 function renderTagChips() {
@@ -1213,17 +1374,19 @@ function onTagInput(e) {
     .slice(0, 8);
 
   if (!matches.length) { hideTagAC(); return; }
-  ac.innerHTML = matches.map(t =>
+  ac.innerHTML = matches.map((t, i) =>
     `<div class="autocomplete-item" data-name="${esc(t.name)}"
           onmousedown="selectTagAC('${esc(t.name)}')">${esc(t.name)}</div>`
   ).join('');
   ac.style.display = '';
+  // Position below editor
   const ed = document.getElementById('tag-editor');
   const rect = ed.getBoundingClientRect();
   const panelRect = document.getElementById('detail-panel').getBoundingClientRect();
   ac.style.left = (rect.left - panelRect.left) + 'px';
   ac.style.top  = (rect.bottom - panelRect.top) + 'px';
   ac.style.width = rect.width + 'px';
+  document.getElementById('detail-panel').style.position = 'fixed';
 }
 
 function hideTagAC() {
@@ -1237,23 +1400,49 @@ function selectTagAC(name) {
     renderTagChips();
     saveTagsDebounced();
   }
-  document.getElementById('tag-input').value = '';
-  hideTagAC();
+  const inp = document.getElementById('tag-input');
+  if (inp) { inp.value = ''; inp.focus(); }
+  _refreshTagAC();
 }
 
 function onTagKeydown(e) {
   const inp = e.target;
+  const items = _tagState.acItems;
+  const acVisible = document.getElementById('tag-autocomplete')?.style.display !== 'none';
+
+  if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && acVisible) {
+    e.preventDefault();
+    _tagState.acIdx = _moveIdx(_tagState.acIdx, items.length, e.key === 'ArrowDown' ? 1 : -1);
+    _showAC({ acId: 'tag-autocomplete', anchorId: 'tag-editor',
+              items, acIdx: _tagState.acIdx });
+    return;
+  }
+
   if (e.key === 'Enter' || e.key === ',') {
     e.preventDefault();
-    const val = inp.value.trim();
-    if (val && !_tagState.names.includes(val)) {
-      _tagState.names.push(val);
-      renderTagChips();
-      saveTagsDebounced();
+    if (_tagState.acIdx >= 0 && items[_tagState.acIdx]) {
+      selectTagAC(items[_tagState.acIdx].name);
+    } else {
+      const val = inp.value.trim();
+      if (val && !_tagState.names.includes(val)) {
+        _tagState.names.push(val);
+        renderTagChips();
+        saveTagsDebounced();
+      }
+      inp.value = '';
+      _refreshTagAC();
     }
-    inp.value = '';
-    hideTagAC();
-  } else if (e.key === 'Backspace' && !inp.value && _tagState.names.length) {
+    return;
+  }
+
+  if (e.key === 'Escape') {
+    e.stopPropagation(); // prevent global handler from closing detail panel
+    _hideAC('tag-autocomplete');
+    inp.blur();
+    return;
+  }
+
+  if (e.key === 'Backspace' && !inp.value && _tagState.names.length) {
     _tagState.names.pop();
     renderTagChips();
     saveTagsDebounced();
@@ -1279,15 +1468,13 @@ async function saveTags() {
 // =====================================================================
 // Keyword editor (with autocomplete from global list)
 // =====================================================================
-let _kwState = { entryId: null, kws: [] };
+let _kwState = { entryId: null, kws: [], acIdx: -1, acItems: [] };
 
 function initKwEditor(entryId, kws) {
-  _kwState = { entryId, kws: [...kws] };
+  _kwState = { entryId, kws: [...kws], acIdx: -1, acItems: [] };
   renderKwChips();
   const inp = document.getElementById('kw-input');
-  inp.addEventListener('input', onKwInput);
   inp.addEventListener('keydown', onKwKeydown);
-  inp.addEventListener('blur', () => setTimeout(hideKwAC, 150));
 }
 
 function renderKwChips() {
@@ -1304,45 +1491,19 @@ function removeKw(idx) {
   saveKwDebounced();
 }
 
-function onKwInput(e) {
-  const q = e.target.value.toLowerCase();
-  const ac = document.getElementById('kw-autocomplete');
-  if (!q) { hideKwAC(); return; }
-
-  const matches = state.allKeywords
-    .filter(k => k.name.toLowerCase().includes(q) && !_kwState.kws.includes(k.name))
-    .slice(0, 8);
-
-  if (!matches.length) { hideKwAC(); return; }
-  ac.innerHTML = matches.map(k =>
-    `<div class="autocomplete-item" onmousedown="selectKwAC('${esc(k.name)}')">${esc(k.name)}</div>`
-  ).join('');
-  ac.style.display = '';
-  const wrap = document.getElementById('kw-wrap');
-  const rect = wrap.getBoundingClientRect();
-  const panelRect = document.getElementById('detail-panel').getBoundingClientRect();
-  ac.style.left = (rect.left - panelRect.left) + 'px';
-  ac.style.top  = (rect.bottom - panelRect.top) + 'px';
-  ac.style.width = rect.width + 'px';
-}
-
-function hideKwAC() {
-  const ac = document.getElementById('kw-autocomplete');
-  if (ac) ac.style.display = 'none';
-}
-
-function selectKwAC(name) {
-  if (!_kwState.kws.includes(name)) {
-    _kwState.kws.push(name);
-    renderKwChips();
-    saveKwDebounced();
-  }
-  document.getElementById('kw-input').value = '';
-  hideKwAC();
-}
-
 function onKwKeydown(e) {
   const inp = e.target;
+  const items = _kwState.acItems;
+  const acVisible = document.getElementById('kw-autocomplete')?.style.display !== 'none';
+
+  if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && acVisible) {
+    e.preventDefault();
+    _kwState.acIdx = _moveIdx(_kwState.acIdx, items.length, e.key === 'ArrowDown' ? 1 : -1);
+    _showAC({ acId: 'kw-autocomplete', anchorId: 'kw-wrap',
+              items, acIdx: _kwState.acIdx });
+    return;
+  }
+
   if (e.key === 'Enter' || e.key === ',') {
     e.preventDefault();
     const val = inp.value.trim();
@@ -1352,7 +1513,6 @@ function onKwKeydown(e) {
       saveKwDebounced();
     }
     inp.value = '';
-    hideKwAC();
   } else if (e.key === 'Backspace' && !inp.value && _kwState.kws.length) {
     _kwState.kws.pop();
     renderKwChips();
@@ -1377,16 +1537,91 @@ async function saveKws() {
 }
 
 // =====================================================================
-// Reading note
+// Arrow-key index helper
 // =====================================================================
-async function saveReadingNote(entryId) {
-  const content = document.getElementById('reading-note').value;
-  await api(`/api/entries/${entryId}`, {
-    method: 'PATCH',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ reading_note: content }),
+function _moveIdx(cur, len, dir) {
+  if (len === 0) return -1;
+  if (cur === -1) return dir === 1 ? 0 : len - 1;
+  return (cur + dir + len) % len;
+}
+
+// =====================================================================
+// Reading note – auto-save on input + force-save on close / entry switch
+// =====================================================================
+
+// _note stores content separately from the DOM so it survives textarea destruction
+let _note = {
+  entryId: null,
+  savedContent: '',   // last successfully saved value
+  pendingContent: null, // non-null means there are unsaved edits
+  timer: null,
+};
+
+function initNoteEditor(entryId, initialContent) {
+  clearTimeout(_note.timer);
+  _note = { entryId, savedContent: initialContent, pendingContent: null, timer: null };
+
+  const ta = document.getElementById('reading-note');
+  if (!ta) return;
+
+  ta.addEventListener('input', () => {
+    _note.pendingContent = ta.value;
+    clearTimeout(_note.timer);
+    _note.timer = setTimeout(() => _doSaveNote(), 800);
+    _updateNoteSaveIndicator('unsaved');
   });
-  showToast('メモを保存しました', 'ok');
+
+  // Ctrl+Enter = save immediately and blur
+  ta.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      _note.pendingContent = ta.value;
+      clearTimeout(_note.timer);
+      _doSaveNote();
+      ta.blur();
+    }
+  });
+
+  // blur = immediate save (covers Tab-away, click-outside, etc.)
+  ta.addEventListener('blur', () => {
+    if (_note.pendingContent !== null) {
+      clearTimeout(_note.timer);
+      _doSaveNote();
+    }
+  });
+}
+
+async function flushNote() {
+  // Called before destroying the panel – works even if textarea is gone
+  if (_note.pendingContent === null || !_note.entryId) return;
+  clearTimeout(_note.timer);
+  await _doSaveNote();
+}
+
+async function _doSaveNote() {
+  if (_note.pendingContent === null || !_note.entryId) return;
+  const content = _note.pendingContent;
+  _note.pendingContent = null; // mark as in-flight before await
+  try {
+    await api(`/api/entries/${_note.entryId}`, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ reading_note: content }),
+    });
+    _note.savedContent = content;
+    _updateNoteSaveIndicator('saved');
+  } catch (e) {
+    _note.pendingContent = content; // restore so retry is possible
+    _updateNoteSaveIndicator('error');
+  }
+}
+
+function _updateNoteSaveIndicator(state) {
+  const el = document.getElementById('note-save-status');
+  if (!el) return;
+  if (state === 'saved')   { el.textContent = '✓ 保存済み'; el.style.color = 'var(--green)'; }
+  if (state === 'unsaved') { el.textContent = '…編集中';   el.style.color = 'var(--muted)'; }
+  if (state === 'error')   { el.textContent = '⚠ 保存失敗'; el.style.color = 'var(--red)'; }
 }
 
 // =====================================================================
@@ -1412,7 +1647,8 @@ function addCitationForm(entryId) {
     <div id="${formId}" class="citation-card" style="border-color:var(--accent);">
       <input class="inline-input" id="cit-key" placeholder="出典 cite_key（任意）" style="margin-bottom:6px;">
       <input class="inline-input" id="cit-title" placeholder="出典タイトル（任意）" style="margin-bottom:6px;">
-      <textarea class="note-area" id="cit-content" rows="3" placeholder="何が書かれていると言っていたか…"></textarea>
+      <textarea class="note-area" id="cit-content" rows="3" placeholder="何が書かれていると言っていたか… (Ctrl+Enterで保存)"
+        onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();submitNewCitation(${entryId});}"></textarea>
       <div class="citation-actions" style="margin-top:6px;">
         <button class="btn btn-primary" onclick="submitNewCitation(${entryId})">保存</button>
         <button class="btn" onclick="document.getElementById('${formId}').remove()">キャンセル</button>
@@ -1443,7 +1679,8 @@ function editCitationForm(citId, key, title, content) {
   card.innerHTML = `
     <input class="inline-input" id="edit-key-${citId}" value="${esc(key)}" placeholder="出典 cite_key" style="margin-bottom:6px;">
     <input class="inline-input" id="edit-title-${citId}" value="${esc(title)}" placeholder="出典タイトル" style="margin-bottom:6px;">
-    <textarea class="note-area" id="edit-content-${citId}" rows="3">${esc(content)}</textarea>
+    <textarea class="note-area" id="edit-content-${citId}" rows="3"
+      onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();submitEditCitation(${citId});}">${esc(content)}</textarea>
     <div class="citation-actions" style="margin-top:6px;">
       <button class="btn btn-primary" onclick="submitEditCitation(${citId})">保存</button>
       <button class="btn" onclick="openDetail(${state.currentEntryId})">キャンセル</button>
@@ -1558,6 +1795,409 @@ function showToast(msg, type = 'ok') {
   el.className = `show ${type}`;
   clearTimeout(_toastTimer);
   _toastTimer = setTimeout(() => el.className = '', 2200);
+}
+
+// =====================================================================
+// =====================================================================
+// Add entry modal
+// =====================================================================
+function openAddModal() {
+  document.getElementById('add-modal').classList.add('open');
+  document.getElementById('add-error').textContent = '';
+  document.getElementById('add-parse-status').textContent = '';
+  // Reset BibTeX tab by default
+  switchAddTab('bib');
+  document.getElementById('add-bibtex-input').value = '';
+  _clearAddForm();
+  setTimeout(() => document.getElementById('add-bibtex-input').focus(), 50);
+}
+
+function closeAddModal() {
+  document.getElementById('add-modal').classList.remove('open');
+}
+
+function switchAddTab(tab) {
+  const isBib = tab === 'bib';
+  document.getElementById('add-panel-bib').style.display  = isBib ? 'flex' : 'none';
+  document.getElementById('add-panel-form').style.display = isBib ? 'none' : 'flex';
+  document.getElementById('add-tab-bib').className  = 'add-tab' + (isBib ? ' add-tab-active' : '');
+  document.getElementById('add-tab-form').className = 'add-tab' + (!isBib ? ' add-tab-active' : '');
+  document.getElementById('add-error').textContent = '';
+  if (!isBib) setTimeout(() => document.getElementById('add-cite-key').focus(), 50);
+}
+
+function _clearAddForm() {
+  ['add-cite-key','add-title','add-author','add-year','add-month',
+   'add-journal','add-volume','add-number','add-pages',
+   'add-doi','add-eprint','add-url','add-abstract'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  const et = document.getElementById('add-entry-type');
+  if (et) et.value = 'article';
+}
+
+function _fillAddForm(fields) {
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
+  set('add-entry-type', fields.entry_type);
+  set('add-cite-key',   fields.cite_key);
+  set('add-title',      fields.title);
+  set('add-author',     fields.author);
+  set('add-year',       fields.year);
+  set('add-month',      fields.month);
+  set('add-journal',    fields.journal);
+  set('add-volume',     fields.volume);
+  set('add-number',     fields.number);
+  set('add-pages',      fields.pages);
+  set('add-doi',        fields.doi);
+  set('add-eprint',     fields.eprint);
+  set('add-url',        fields.url);
+  set('add-abstract',   fields.abstract);
+}
+
+async function parseBibtexAndFill() {
+  const bib = document.getElementById('add-bibtex-input').value.trim();
+  const status = document.getElementById('add-parse-status');
+  if (!bib) { status.textContent = 'BibTeXを入力してください'; status.style.color = 'var(--red)'; return; }
+
+  status.textContent = '解析中…'; status.style.color = 'var(--muted)';
+  try {
+    const fields = await api('/api/parse-bibtex', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ bibtex: bib }),
+    });
+    _fillAddForm(fields);
+    switchAddTab('form');
+    status.textContent = '✓ 解析完了';
+    status.style.color = 'var(--green)';
+  } catch(e) {
+    status.textContent = '解析失敗: ' + e.message;
+    status.style.color = 'var(--red)';
+  }
+}
+
+async function submitNewEntry() {
+  // Ensure form tab is active (BibTeX tab alone is not enough)
+  const formVisible = document.getElementById('add-panel-form').style.display !== 'none';
+  if (!formVisible) {
+    // Try to auto-parse first if there's BibTeX content
+    const bib = document.getElementById('add-bibtex-input').value.trim();
+    if (bib) {
+      await parseBibtexAndFill();
+      // parseBibtexAndFill switches to form tab on success
+      const stillBib = document.getElementById('add-panel-form').style.display === 'none';
+      if (stillBib) return; // parse failed
+    } else {
+      switchAddTab('form');
+      return;
+    }
+  }
+
+  const val = id => document.getElementById(id)?.value.trim() ?? '';
+  const fields = {
+    entry_type: val('add-entry-type') || 'article',
+    cite_key:   val('add-cite-key'),
+    title:      val('add-title'),
+    author:     val('add-author'),
+    year:       val('add-year') ? parseInt(val('add-year')) : null,
+    month:      val('add-month'),
+    journal:    val('add-journal'),
+    volume:     val('add-volume'),
+    number:     val('add-number'),
+    pages:      val('add-pages'),
+    doi:        val('add-doi'),
+    eprint:     val('add-eprint'),
+    url:        val('add-url'),
+    abstract:   document.getElementById('add-abstract')?.value.trim() ?? '',
+  };
+
+  const errEl = document.getElementById('add-error');
+  if (!fields.cite_key) { errEl.textContent = 'cite key は必須です'; return; }
+
+  errEl.textContent = '';
+  try {
+    const entry = await api('/api/entries', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(fields),
+    });
+    closeAddModal();
+    // Refresh list and open detail
+    await loadEntries();
+    await loadStats();
+    openDetail(entry.id);
+    showToast('文献を追加しました', 'ok');
+  } catch(e) {
+    errEl.textContent = e.message;
+  }
+}
+
+// =====================================================================
+// Duplicate detection modal
+// =====================================================================
+async function openDupesModal() {
+  const overlay = document.getElementById('dupes-modal');
+  const body    = document.getElementById('dupes-body');
+  overlay.classList.add('open');
+  body.innerHTML = '<div style="display:flex;justify-content:center;padding:24px;"><span class="spinner"></span></div>';
+
+  try {
+    const groups = await api('/api/duplicates');
+    if (!groups.length) {
+      body.innerHTML = '<div style="color:var(--green);padding:16px;text-align:center;">✓ 重複は見つかりませんでした</div>';
+      return;
+    }
+    body.innerHTML = groups.map((group, gi) => `
+      <div class="dupe-group">
+        <div class="dupe-group-header">グループ ${gi + 1}（${group.length}件）</div>
+        ${group.map(e => `
+          <div class="dupe-entry">
+            <div class="dupe-entry-info">
+              <div class="dupe-entry-title">${esc(e.title || '(タイトルなし)')}</div>
+              <div class="dupe-entry-sub">
+                ${esc(e.author || '著者不明')} &nbsp;·&nbsp; ${e.year || '?'}
+                ${e.doi    ? `&nbsp;·&nbsp; DOI: ${esc(e.doi)}`    : ''}
+                ${e.eprint ? `&nbsp;·&nbsp; arXiv: ${esc(e.eprint)}` : ''}
+                &nbsp;·&nbsp; <span style="color:var(--muted);font-family:var(--font-mono);font-size:10px;">${esc(e.cite_key)}</span>
+              </div>
+            </div>
+            <button class="btn" onclick="dupesOpenDetail(${e.id})" title="詳細を開く">詳細</button>
+            <button class="btn btn-danger" onclick="dupesDelete(${e.id}, this)" title="この文献を削除">🗑</button>
+          </div>
+        `).join('')}
+      </div>
+    `).join('');
+  } catch(err) {
+    body.innerHTML = `<div style="color:var(--red);padding:16px;">エラー: ${esc(err.message)}</div>`;
+  }
+}
+
+function closeDupesModal() {
+  document.getElementById('dupes-modal').classList.remove('open');
+  loadEntries();
+  loadStats();
+}
+
+function dupesOpenDetail(entryId) {
+  closeDupesModal();
+  openDetail(entryId);
+}
+
+async function dupesDelete(entryId, btn) {
+  if (!confirm('この文献を削除しますか？\nメモ・タグも含めすべて削除されます。')) return;
+  btn.disabled = true;
+  btn.textContent = '…';
+  try {
+    await api(`/api/entries/${entryId}`, { method: 'DELETE' });
+    // Remove the dupe-entry row from the modal DOM
+    const row = btn.closest('.dupe-entry');
+    const group = btn.closest('.dupe-group');
+    row.remove();
+    // If only 1 entry left in group, collapse the group
+    const remaining = group.querySelectorAll('.dupe-entry').length;
+    if (remaining < 2) {
+      group.innerHTML = `<div style="padding:8px 12px;font-size:12px;color:var(--green);">✓ 解決済み</div>`;
+    }
+    // Remove from cache
+    _cachedEntries = _cachedEntries.filter(e => e.id !== entryId);
+    state.total = Math.max(0, state.total - 1);
+    renderTable();
+    showToast('削除しました', 'ok');
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = '🗑';
+    showToast('削除に失敗しました', 'err');
+  }
+}
+
+// =====================================================================
+// Manage tags / keywords modal
+// =====================================================================
+let _manageTab = 'tags';
+
+function openManageModal(tab = 'tags') {
+  _manageTab = tab;
+  document.getElementById('manage-modal').classList.add('open');
+  switchManageTab(tab);
+}
+
+function closeManageModal() {
+  document.getElementById('manage-modal').classList.remove('open');
+}
+
+function switchManageTab(tab) {
+  _manageTab = tab;
+  document.getElementById('manage-tab-tags').className = 'add-tab' + (tab === 'tags' ? ' add-tab-active' : '');
+  document.getElementById('manage-tab-kws').className  = 'add-tab' + (tab === 'kws'  ? ' add-tab-active' : '');
+  document.getElementById('manage-modal-title').textContent = tab === 'tags' ? 'タグ管理' : 'キーワード管理';
+  renderManageList();
+}
+
+function renderManageList() {
+  const list  = document.getElementById('manage-list');
+  const items = _manageTab === 'tags' ? state.allTags : state.allKeywords;
+  const dotClass = _manageTab === 'tags' ? 'tag-dot' : 'kw-dot';
+
+  if (!items.length) {
+    list.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:16px;text-align:center;">
+      ${_manageTab === 'tags' ? 'タグがありません' : 'キーワードがありません'}
+    </div>`;
+    return;
+  }
+
+  // Use data-* attributes for item id/name to avoid JS string-escaping bugs
+  list.innerHTML = items.map(item => `
+    <div class="manage-row" id="manage-row-${item.id}">
+      <div class="${dotClass}" style="flex-shrink:0;"></div>
+      <span class="manage-name">${esc(item.name)}</span>
+      <span class="tag-count">${item.count}</span>
+      <button class="btn _mgr-rename" data-id="${item.id}" data-name="${esc(item.name)}"
+              style="padding:3px 8px;font-size:11px;">✏ 変更</button>
+      <button class="btn btn-danger _mgr-delete" data-id="${item.id}" data-name="${esc(item.name)}"
+              style="padding:3px 8px;font-size:11px;">🗑</button>
+    </div>
+  `).join('');
+
+  // Attach event listeners (safe for any name including commas, quotes, etc.)
+  list.querySelectorAll('._mgr-rename').forEach(btn => {
+    btn.addEventListener('click', () => startRenameItem(parseInt(btn.dataset.id), btn.dataset.name));
+  });
+  list.querySelectorAll('._mgr-delete').forEach(btn => {
+    btn.addEventListener('click', () => confirmDeleteItem(parseInt(btn.dataset.id), btn.dataset.name));
+  });
+}
+
+function startRenameItem(id, currentName) {
+  const row = document.getElementById(`manage-row-${id}`);
+  if (!row) return;
+  row.innerHTML = `
+    <input class="inline-input _mgr-rename-inp" value="${esc(currentName)}"
+           style="flex:1;min-width:0;">
+    <button class="btn btn-primary _mgr-save" style="padding:3px 10px;font-size:11px;white-space:nowrap;">保存</button>
+    <button class="btn _mgr-cancel"           style="padding:3px 8px;font-size:11px;">✕</button>
+  `;
+  const inp = row.querySelector('._mgr-rename-inp');
+  if (inp) {
+    inp.focus(); inp.select();
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter')  submitRenameItem(id, inp);
+      if (e.key === 'Escape') renderManageList();
+    });
+  }
+  row.querySelector('._mgr-save').addEventListener('click', () => submitRenameItem(id, inp));
+  row.querySelector('._mgr-cancel').addEventListener('click', () => renderManageList());
+}
+
+// Show inline confirmation row instead of browser confirm()
+function confirmDeleteItem(id, name) {
+  const row = document.getElementById(`manage-row-${id}`);
+  if (!row) return;
+  const dotClass = _manageTab === 'tags' ? 'tag-dot' : 'kw-dot';
+  row.innerHTML = `
+    <div class="${dotClass}" style="flex-shrink:0;"></div>
+    <span style="flex:1;font-size:12px;color:var(--red);">「${esc(name)}」を削除？</span>
+    <button class="btn btn-danger _mgr-confirm" style="padding:3px 10px;font-size:11px;white-space:nowrap;">削除する</button>
+    <button class="btn _mgr-cancel"             style="padding:3px 8px;font-size:11px;">✕</button>
+  `;
+  row.querySelector('._mgr-confirm').addEventListener('click', () => deleteManageItem(id, name));
+  row.querySelector('._mgr-cancel').addEventListener('click', () => renderManageList());
+}
+
+async function submitRenameItem(id, inp) {
+  if (!inp) return;
+  const newName = inp.value.trim();
+  if (!newName) { showToast('名前を入力してください', 'err'); return; }
+
+  // Find old name before the update
+  const items   = _manageTab === 'tags' ? state.allTags : state.allKeywords;
+  const oldItem = items.find(i => i.id === id);
+  const oldName = oldItem ? oldItem.name : null;
+
+  inp.disabled = true;
+  try {
+    const endpoint = _manageTab === 'tags' ? `/api/tags/${id}` : `/api/keywords/${id}`;
+    await api(endpoint, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ name: newName }),
+    });
+
+    // Patch client state directly — no openDetail() needed
+    if (oldName) {
+      if (_manageTab === 'tags') {
+        // Update sidebar state
+        state.allTags = state.allTags.map(t => t.id === id ? {...t, name: newName} : t);
+        renderTags();
+        // Update open detail chips
+        if (_tagState.entryId) {
+          const i = _tagState.names.indexOf(oldName);
+          if (i !== -1) { _tagState.names[i] = newName; renderTagChips(); }
+        }
+        // Update cached entries
+        _cachedEntries.forEach(e => {
+          (e.tags || []).forEach(t => { if (t.name === oldName) t.name = newName; });
+        });
+      } else {
+        state.allKeywords = state.allKeywords.map(k => k.id === id ? {...k, name: newName} : k);
+        renderKeywords();
+        if (_kwState.entryId) {
+          const i = _kwState.kws.indexOf(oldName);
+          if (i !== -1) { _kwState.kws[i] = newName; renderKwChips(); }
+        }
+        _cachedEntries.forEach(e => {
+          if (e.keywords) {
+            const i = e.keywords.indexOf(oldName);
+            if (i !== -1) e.keywords[i] = newName;
+          }
+        });
+      }
+      renderManageList();
+      renderTable();
+    }
+    showToast('名前を変更しました', 'ok');
+  } catch(err) {
+    inp.disabled = false;
+    showToast('変更に失敗しました: ' + err.message, 'err');
+  }
+}
+
+async function deleteManageItem(id, name) {
+  // Disable the confirm button to prevent double-submission
+  const row = document.getElementById(`manage-row-${id}`);
+  const confirmBtn = row?.querySelector('._mgr-confirm');
+  if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.textContent = '…'; }
+
+  try {
+    const endpoint = _manageTab === 'tags' ? `/api/tags/${id}` : `/api/keywords/${id}`;
+    await api(endpoint, { method: 'DELETE' });
+
+    // Patch client state directly — no openDetail() needed
+    if (_manageTab === 'tags') {
+      state.allTags = state.allTags.filter(t => t.id !== id);
+      renderTags();
+      if (_tagState.entryId) {
+        const i = _tagState.names.indexOf(name);
+        if (i !== -1) { _tagState.names.splice(i, 1); renderTagChips(); }
+      }
+      _cachedEntries.forEach(e => { if (e.tags) e.tags = e.tags.filter(t => t.name !== name); });
+    } else {
+      state.allKeywords = state.allKeywords.filter(k => k.id !== id);
+      renderKeywords();
+      if (_kwState.entryId) {
+        const i = _kwState.kws.indexOf(name);
+        if (i !== -1) { _kwState.kws.splice(i, 1); renderKwChips(); }
+      }
+      _cachedEntries.forEach(e => { if (e.keywords) e.keywords = e.keywords.filter(k => k !== name); });
+    }
+    renderManageList();
+    renderTable();
+    const type = _manageTab === 'tags' ? 'タグ' : 'キーワード';
+    showToast(`${type}を削除しました`, 'ok');
+  } catch(err) {
+    if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = '削除する'; }
+    showToast('削除に失敗しました', 'err');
+  }
 }
 
 // =====================================================================

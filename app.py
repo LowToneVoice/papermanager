@@ -56,6 +56,44 @@ def api_entries():
     return jsonify({'entries': rows, 'total': total, 'limit': limit, 'offset': offset})
 
 
+@app.route('/api/entries', methods=['POST'])
+def api_create_entry():
+    fields = request.get_json(force=True)
+    try:
+        entry = db.create_entry(fields)
+        return jsonify(entry), 201
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+
+
+@app.route('/api/parse-bibtex', methods=['POST'])
+def api_parse_bibtex():
+    """Parse a raw BibTeX string and return structured fields."""
+    data = request.get_json(force=True)
+    bib_text = data.get('bibtex', '')
+    entries = parse_bib_string(bib_text)
+    if not entries:
+        return jsonify({'error': 'BibTeX を解析できませんでした'}), 400
+    e = entries[0]
+    from bib_parser import split_authors
+    return jsonify({
+        'cite_key':   e.get('cite_key', ''),
+        'entry_type': e.get('entry_type', 'article'),
+        'title':      e.get('title', ''),
+        'author':     e.get('author', ''),
+        'year':       e.get('year', ''),
+        'month':      e.get('month', ''),
+        'journal':    e.get('journal') or e.get('booktitle') or e.get('school') or '',
+        'volume':     e.get('volume', ''),
+        'number':     e.get('number', ''),
+        'pages':      e.get('pages', ''),
+        'doi':        e.get('doi', ''),
+        'url':        e.get('url', ''),
+        'eprint':     e.get('eprint', ''),
+        'abstract':   e.get('abstract', ''),
+    })
+
+
 @app.route('/api/entries/<int:entry_id>')
 def api_entry(entry_id):
     entry = db.get_entry(entry_id)
@@ -77,7 +115,33 @@ def api_update_entry(entry_id):
     if 'reading_note' in data:
         db.set_reading_note(entry_id, data['reading_note'])
 
+    # Bibliographic meta fields
+    meta_keys = ('cite_key', 'entry_type', 'title', 'author', 'year', 'month',
+                 'journal', 'volume', 'number', 'pages', 'doi', 'url', 'eprint', 'abstract')
+    meta = {k: data[k] for k in meta_keys if k in data}
+    if meta:
+        updated = db.update_entry_meta(entry_id, meta)
+        if updated is None:
+            return jsonify({'error': 'Not found'}), 404
+        return jsonify(updated)
+
     return jsonify({'ok': True})
+
+
+@app.route('/api/entries/<int:entry_id>', methods=['DELETE'])
+def api_delete_entry(entry_id):
+    db.delete_entry(entry_id)
+    return jsonify({'ok': True})
+
+
+# ---------------------------------------------------------------------------
+# Duplicates
+# ---------------------------------------------------------------------------
+
+@app.route('/api/duplicates')
+def api_duplicates():
+    groups = db.find_duplicates()
+    return jsonify(groups)
 
 
 # ---------------------------------------------------------------------------

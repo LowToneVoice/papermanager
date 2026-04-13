@@ -214,33 +214,71 @@ def search_entries(
     cur.execute(data_sql, params + [limit, offset])
     rows = [dict(r) for r in cur.fetchall()]
 
-    for row in rows:
-        cur.execute("""
-            SELECT t.id, t.name FROM tags t
+    # Batch-load associated data for all rows (avoids N+1 queries)
+    if rows:
+        ids = [row['id'] for row in rows]
+        ph  = ','.join('?' * len(ids))
+
+        # Tags
+        cur.execute(f"""
+            SELECT et.entry_id, t.id, t.name FROM tags t
             JOIN entry_tags et ON et.tag_id = t.id
-            WHERE et.entry_id = ?
-        """, (row['id'],))
-        row['tags'] = [dict(r) for r in cur.fetchall()]
+            WHERE et.entry_id IN ({ph}) ORDER BY t.name
+        """, ids)
+        tag_map: dict = {}
+        for r in cur.fetchall():
+            tag_map.setdefault(r[0], []).append({'id': r[1], 'name': r[2]})
+
+        # Keywords
+        cur.execute(f"""
+            SELECT ek.entry_id, kl.name FROM keyword_list kl
+            JOIN entry_keywords ek ON ek.keyword_id = kl.id
+            WHERE ek.entry_id IN ({ph}) ORDER BY kl.name
+        """, ids)
+        kw_map: dict = {}
+        for r in cur.fetchall():
+            kw_map.setdefault(r[0], []).append(r[1])
+
+        # Reading notes
+        cur.execute(f"SELECT entry_id, content FROM reading_notes WHERE entry_id IN ({ph})", ids)
+        note_map = {r[0]: r[1] for r in cur.fetchall()}
+
+        # Citations (concatenated text + count)
+        cur.execute(f"""
+            SELECT entry_id, content FROM citations_in_other_papers
+            WHERE entry_id IN ({ph}) ORDER BY entry_id, created_at
+        """, ids)
+        cit_rows: dict = {}
+        for r in cur.fetchall():
+            cit_rows.setdefault(r[0], []).append(r[1] or '')
+        cit_text_map  = {eid: '\n---\n'.join(parts) for eid, parts in cit_rows.items()}
+        cit_count_map = {eid: len(parts)            for eid, parts in cit_rows.items()}
+
+        for row in rows:
+            eid = row['id']
+            row['tags']           = tag_map.get(eid, [])
+            row['keywords']       = kw_map.get(eid, [])
+            row['reading_note']   = note_map.get(eid, '')
+            row['citations_text'] = cit_text_map.get(eid, '')
+            row['citation_count'] = cit_count_map.get(eid, 0)
+    else:
+        for row in rows:
+            row['tags'] = []; row['keywords'] = []
+            row['reading_note'] = ''; row['citations_text'] = ''; row['citation_count'] = 0
 
     conn.close()
     return rows, total
 
 
 def _fts_search(cur, q: str) -> list[int]:
-    try:
-        cur.execute(
-            "SELECT rowid FROM entries_fts WHERE entries_fts MATCH ? ORDER BY rank",
-            (q,)
-        )
-        return [r[0] for r in cur.fetchall()]
-    except Exception:
-        like = f'%{q}%'
-        cur.execute("""
-            SELECT id FROM entries
-            WHERE title LIKE ? OR author_search LIKE ? OR cite_key LIKE ?
-               OR journal LIKE ? OR abstract LIKE ?
-        """, (like, like, like, like, like))
-        return [r[0] for r in cur.fetchall()]
+    """Substring (LIKE) search across main entry fields."""
+    like = f'%{q}%'
+    cur.execute("""
+        SELECT id FROM entries
+        WHERE title LIKE ? OR author_search LIKE ? OR cite_key LIKE ?
+           OR journal LIKE ? OR abstract LIKE ?
+    """, (like, like, like, like, like))
+    return [r[0] for r in cur.fetchall()]
 
 
 def _note_search(cur, q: str) -> list[int]:
@@ -500,6 +538,197 @@ def delete_citation(cit_id: int):
     conn.execute("DELETE FROM citations_in_other_papers WHERE id = ?", (cit_id,))
     conn.commit()
     conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Entry meta edit & delete
+# ---------------------------------------------------------------------------
+
+# Fields that map directly to DB columns (excluding id, imported_at, updated_at)
+_META_FIELDS = ('cite_key', 'entry_type', 'title', 'author', 'year', 'month',
+                'journal', 'volume', 'number', 'pages', 'doi', 'url', 'eprint', 'abstract')
+
+
+def create_entry(fields: dict) -> dict:
+    """
+    Create a brand-new entry from a fields dict.
+    Returns the created entry dict (via get_entry).
+    Raises ValueError if cite_key is empty or already exists.
+    """
+    import re
+    cite_key = (fields.get('cite_key') or '').strip()
+    if not cite_key:
+        raise ValueError('cite_key は必須です')
+
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT id FROM entries WHERE cite_key = ?", (cite_key,))
+    if cur.fetchone():
+        conn.close()
+        raise ValueError(f'cite_key "{cite_key}" は既に存在します')
+
+    parts = re.split(r'\s+and\s+', fields.get('author', '') or '', flags=re.IGNORECASE)
+    author_search = ' | '.join(p.strip() for p in parts if p.strip())
+
+    row = {
+        'cite_key':     cite_key,
+        'entry_type':   fields.get('entry_type', 'article'),
+        'title':        fields.get('title', ''),
+        'author':       fields.get('author', ''),
+        'author_search': author_search,
+        'year':         fields.get('year') or None,
+        'month':        fields.get('month', ''),
+        'journal':      fields.get('journal', ''),
+        'volume':       fields.get('volume', ''),
+        'number':       fields.get('number', ''),
+        'pages':        fields.get('pages', ''),
+        'doi':          fields.get('doi', ''),
+        'url':          fields.get('url', ''),
+        'eprint':       fields.get('eprint', ''),
+        'abstract':     fields.get('abstract', ''),
+    }
+    row['raw_bibtex'] = _build_bibtex(row)
+
+    cur.execute("""
+        INSERT INTO entries
+          (cite_key, entry_type, title, author, author_search,
+           year, month, journal, volume, number, pages,
+           doi, url, eprint, abstract, raw_bibtex)
+        VALUES
+          (:cite_key, :entry_type, :title, :author, :author_search,
+           :year, :month, :journal, :volume, :number, :pages,
+           :doi, :url, :eprint, :abstract, :raw_bibtex)
+    """, row)
+    new_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    return get_entry(new_id)
+
+
+def update_entry_meta(entry_id: int, fields: dict) -> dict | None:
+    """
+    Update bibliographic fields of an entry and rebuild raw_bibtex.
+    Only keys present in fields are updated; others are left unchanged.
+    Returns the updated entry dict, or None if not found.
+    """
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM entries WHERE id = ?", (entry_id,))
+    row = cur.fetchone()
+    if not row:
+        conn.close()
+        return None
+
+    current = dict(row)
+    for k in _META_FIELDS:
+        if k in fields:
+            current[k] = fields[k]
+
+    # rebuild author_search
+    import re
+    parts = re.split(r'\s+and\s+', current.get('author', '') or '', flags=re.IGNORECASE)
+    current['author_search'] = ' | '.join(p.strip() for p in parts if p.strip())
+
+    # rebuild raw_bibtex
+    current['raw_bibtex'] = _build_bibtex(current)
+
+    cur.execute("""
+        UPDATE entries SET
+          cite_key=:cite_key, entry_type=:entry_type,
+          title=:title, author=:author, author_search=:author_search,
+          year=:year, month=:month, journal=:journal,
+          volume=:volume, number=:number, pages=:pages,
+          doi=:doi, url=:url, eprint=:eprint, abstract=:abstract,
+          raw_bibtex=:raw_bibtex, updated_at=CURRENT_TIMESTAMP
+        WHERE id=:id
+    """, {**current, 'id': entry_id})
+    conn.commit()
+    conn.close()
+    return get_entry(entry_id)
+
+
+def _build_bibtex(e: dict) -> str:
+    """Reconstruct a BibTeX entry string from an entry dict."""
+    field_order = ('title', 'author', 'journal', 'booktitle', 'year', 'month',
+                   'volume', 'number', 'pages', 'doi', 'url', 'eprint',
+                   'archiveprefix', 'primaryclass', 'abstract', 'issn', 'isbn',
+                   'publisher', 'school', 'note', 'howpublished')
+    skip = {'id', 'cite_key', 'entry_type', 'author_search', 'raw_bibtex',
+            'imported_at', 'updated_at'}
+    lines = [f"@{e.get('entry_type', 'misc')}{{{e.get('cite_key', 'unknown')},"]
+    seen = set()
+    for k in field_order:
+        v = e.get(k)
+        if v and k not in skip:
+            lines.append(f"  {k} = {{{v}}},")
+            seen.add(k)
+    for k, v in e.items():
+        if k not in seen and k not in skip and v and k not in ('entry_type', 'cite_key'):
+            lines.append(f"  {k} = {{{v}}},")
+    lines.append("}")
+    return '\n'.join(lines)
+
+
+def delete_entry(entry_id: int):
+    """Delete an entry and all associated data (CASCADE handles relations)."""
+    conn = get_conn()
+    conn.execute("DELETE FROM entries WHERE id = ?", (entry_id,))
+    conn.commit()
+    conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Duplicate detection
+# ---------------------------------------------------------------------------
+
+def find_duplicates() -> list[list[dict]]:
+    """
+    Return a list of duplicate groups.
+    Each group is a list of ≥2 entry dicts that share a DOI, eprint, or
+    normalised title.
+    """
+    import re
+
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT id, cite_key, entry_type, title, author, year, doi, eprint
+        FROM entries ORDER BY year, cite_key
+    """)
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+
+    def _norm(t):
+        return re.sub(r'[^a-z0-9]', '', (t or '').lower())
+
+    groups: dict[str, list[dict]] = {}
+
+    for r in rows:
+        keys = []
+        if r['doi']:
+            keys.append('doi:' + _norm(r['doi']))
+        if r['eprint']:
+            keys.append('eprint:' + _norm(r['eprint']))
+        nt = _norm(r['title'])
+        if len(nt) > 10:       # skip very short titles
+            keys.append('title:' + nt)
+
+        for k in keys:
+            groups.setdefault(k, []).append(r)
+
+    seen_sets: list[frozenset] = []
+    result: list[list[dict]] = []
+
+    for entries in groups.values():
+        if len(entries) < 2:
+            continue
+        fs = frozenset(e['id'] for e in entries)
+        if fs in seen_sets:
+            continue
+        seen_sets.append(fs)
+        result.append(entries)
+
+    return result
 
 
 # ---------------------------------------------------------------------------
