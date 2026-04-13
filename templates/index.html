@@ -226,10 +226,35 @@
     cursor: pointer;
     user-select: none;
   }
+
+  /* ── Table view ── */
+  .entry-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .entry-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--bg3);
+  }
+  .entry-table th {
+    padding: 8px 12px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+  }
   .entry-table th:hover { color: var(--text); }
   .entry-table th .sort-arrow { margin-left: 3px; opacity: .5; }
   .entry-table th.sorted .sort-arrow { opacity: 1; color: var(--accent); }
-
   .entry-table tbody tr {
     border-bottom: 1px solid var(--border);
     cursor: pointer;
@@ -241,8 +266,46 @@
   }
   .entry-table td {
     padding: 7px 12px;
-    vertical-align: middle;
+    vertical-align: top;
     line-height: 1.4;
+  }
+  .td-yyyymm {
+    width: 62px;
+    color: var(--yellow);
+    font-weight: 700;
+    white-space: nowrap;
+    font-size: 12px;
+  }
+  .td-title {
+    min-width: 180px;
+    max-width: 280px;
+  }
+  .td-title-text {
+    font-weight: 600;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .td-authors {
+    width: 140px;
+    max-width: 140px;
+    color: var(--muted);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: 12px;
+  }
+  .td-tags { width: 120px; }
+  .td-tags-wrap { display: flex; flex-wrap: wrap; gap: 3px; }
+  .td-note {
+    max-width: 200px;
+    font-size: 12px;
+    color: var(--muted);
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
   }
   .entry-year {
     font-size: 12px;
@@ -250,7 +313,6 @@
     font-weight: 700;
     white-space: nowrap;
     font-family: var(--font-mono);
-    font-size: 12px;
   }
   .td-type {
     width: 70px;
@@ -264,29 +326,6 @@
     border: 1px solid var(--border);
     white-space: nowrap;
   }
-  .td-title {
-    min-width: 200px;
-    max-width: 340px;
-  }
-  .td-title-text {
-    font-weight: 600;
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-  }
-  .td-authors {
-    width: 180px;
-    max-width: 180px;
-    color: var(--muted);
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
-  .td-tags {
-    min-width: 100px;
-  }
-  .td-tags-wrap { display: flex; flex-wrap: wrap; gap: 3px; }
   .tag-badge {
     font-size: 10px;
     padding: 1px 7px;
@@ -677,6 +716,16 @@
     <div class="tags-list" id="tags-list">
       <div style="color:var(--muted);font-size:12px;padding:8px;">読み込み中…</div>
     </div>
+
+    <div class="sidebar-section" style="border-bottom:none; padding-bottom:4px;">
+      <div class="sidebar-label">
+        <span>キーワード</span>
+        <span id="kw-clear" style="cursor:pointer;color:var(--muted);font-size:10px;display:none;" onclick="clearKwFilter()">クリア</span>
+      </div>
+    </div>
+    <div class="tags-list" id="keywords-list">
+      <div style="color:var(--muted);font-size:12px;padding:8px;">読み込み中…</div>
+    </div>
   </aside>
 
   <!-- Entry list -->
@@ -686,6 +735,7 @@
       <span class="count" id="list-count"></span>
     </div>
     <div class="entry-list" id="entry-list"></div>
+    <div class="pagination" id="pagination"></div>
   </div>
 
 </div>
@@ -739,7 +789,11 @@ let state = {
   allKeywords: [], // [{id, name, count}]
   currentEntryId: null,
   debounceTimer: null,
+  sortCol: 'year',
+  sortDir: -1,     // -1 = desc, 1 = asc
 };
+
+let _cachedEntries = [];
 
 // =====================================================================
 // Init
@@ -777,7 +831,15 @@ function bindEvents() {
       e.preventDefault();
       document.getElementById('search').focus();
     }
-    if (e.key === 'Escape') { e.preventDefault(); closeDetail(); }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      const active = document.activeElement;
+      if (active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT') && active.id !== 'search') {
+        active.blur();
+      } else {
+        closeDetail();
+      }
+    }
   });
 
   // Import / Export
@@ -922,7 +984,7 @@ async function loadEntries() {
   const params = new URLSearchParams({
     q:      state.query,
     limit:  state.limit,
-    offset: 0,
+    offset: state.offset,
   });
   if (state.yearFrom) params.append('year_from', state.yearFrom);
   if (state.yearTo)   params.append('year_to',   state.yearTo);
@@ -933,6 +995,7 @@ async function loadEntries() {
 
   const data = await api('/api/entries?' + params.toString());
   state.total = data.total;
+  _cachedEntries = data.entries;
 
   renderTable();
 }
@@ -947,15 +1010,106 @@ function renderTable() {
     </div>`;
     document.getElementById('list-status').textContent = '0件';
     document.getElementById('list-count').textContent = '';
+    renderPagination(state.total);
     return;
   }
 
-  el.innerHTML = data.entries.map(e => entryCardHTML(e)).join('');
-  document.getElementById('list-status').textContent = `${data.total.toLocaleString()} 件`;
-  document.getElementById('list-count').textContent =
-    `${state.offset + 1}–${Math.min(state.offset + state.limit, data.total)} 件表示`;
+  // Client-side sort
+  const sorted = [..._cachedEntries].sort((a, b) => {
+    let va = a[state.sortCol] ?? '';
+    let vb = b[state.sortCol] ?? '';
+    if (state.sortCol === 'year') { va = va || 0; vb = vb || 0; }
+    if (va < vb) return -state.sortDir;
+    if (va > vb) return  state.sortDir;
+    return 0;
+  });
 
-  renderPagination(data.total);
+  const cols = [
+    { key: 'year',    label: 'YYYYMM',    cls: 'td-yyyymm' },
+    { key: 'title',   label: 'タイトル',  cls: 'td-title' },
+    { key: 'author',  label: '著者',      cls: 'td-authors' },
+    { key: 'tags',    label: 'タグ',      cls: 'td-tags',  noSort: true },
+    { key: 'keywords',label: 'KW',        cls: 'td-tags',  noSort: true },
+    { key: '_note',   label: '読書メモ',  cls: 'td-note',  noSort: true },
+    { key: '_cit',    label: '他文献言及', cls: 'td-note', noSort: true },
+  ];
+
+  const thead = cols.map(c => {
+    const isSorted = state.sortCol === c.key;
+    const arrow = c.noSort ? '' : `<span class="sort-arrow">${isSorted ? (state.sortDir === 1 ? '▲' : '▼') : '▲'}</span>`;
+    const onclick = c.noSort ? '' : `onclick="sortBy('${c.key}')"`;
+    return `<th class="${c.cls} ${isSorted ? 'sorted' : ''}" ${onclick}>${c.label}${arrow}</th>`;
+  }).join('');
+
+  const tbody = sorted.map(e => {
+    const yyyymm  = getYYYYMM(e);
+    const authors = formatAuthors(e.author);
+    const tags    = (e.tags || []).map(t => `<span class="tag-badge">${esc(t.name)}</span>`).join('');
+    const kws     = (e.keywords || []).map(k => `<span class="tag-badge" style="border-color:var(--accent2)">${esc(k)}</span>`).join('');
+
+    return `<tr onclick="openDetail(${e.id})" id="ec-${e.id}"
+                class="${state.currentEntryId === e.id ? 'active' : ''}">
+      <td class="td-yyyymm">${yyyymm}</td>
+      <td class="td-title"><div class="td-title-text">${esc(e.title || '(タイトルなし)')}</div></td>
+      <td class="td-authors">${esc(authors)}</td>
+      <td class="td-tags"><div class="td-tags-wrap">${tags}</div></td>
+      <td class="td-tags"><div class="td-tags-wrap">${kws}</div></td>
+      <td class="td-note">${esc(e.reading_note || '')}</td>
+      <td class="td-note">${esc(e.citations_text || '')}</td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML = `<table class="entry-table">
+    <thead><tr>${thead}</tr></thead>
+    <tbody>${tbody}</tbody>
+  </table>`;
+
+  document.getElementById('list-status').textContent = `${state.total.toLocaleString()} 件`;
+  document.getElementById('list-count').textContent =
+    `${state.offset + 1}–${Math.min(state.offset + state.limit, state.total)} 件表示`;
+
+  renderPagination(state.total);
+}
+
+function sortBy(col) {
+  if (state.sortCol === col) {
+    state.sortDir *= -1;
+  } else {
+    state.sortCol = col;
+    state.sortDir = col === 'year' ? -1 : 1;
+  }
+  renderTable();
+}
+
+function getYYYYMM(e) {
+  if (e.eprint) {
+    // New arXiv format: YYMM.NNNNN
+    const m1 = e.eprint.match(/^(\d{2})(\d{2})\.\d/);
+    if (m1) {
+      const yy = parseInt(m1[1]);
+      const yyyy = yy >= 91 ? 1900 + yy : 2000 + yy;
+      return `${yyyy}${m1[2]}`;
+    }
+    // Old arXiv format: hep-th/YYMMNNN
+    const m2 = e.eprint.match(/\/(\d{2})(\d{2})\d/);
+    if (m2) {
+      const yy = parseInt(m2[1]);
+      const yyyy = yy >= 91 ? 1900 + yy : 2000 + yy;
+      return `${yyyy}${m2[2]}`;
+    }
+  }
+  if (e.year) {
+    return `${e.year}${_monthNum(e.month)}`;
+  }
+  return '?';
+}
+
+function _monthNum(month) {
+  if (!month) return '00';
+  if (/^\d+$/.test(month)) return String(parseInt(month)).padStart(2, '0');
+  const map = {jan:'01',feb:'02',mar:'03',apr:'04',may:'05',jun:'06',
+               jul:'07',aug:'08',sep:'09',oct:'10',nov:'11',dec:'12'};
+  return map[month.toLowerCase().slice(0,3)] || '00';
 }
 
 function entryCardHTML(e) {
@@ -1387,6 +1541,7 @@ function onTagInput(e) {
   ac.style.top  = (rect.bottom - panelRect.top) + 'px';
   ac.style.width = rect.width + 'px';
   document.getElementById('detail-panel').style.position = 'fixed';
+  _tagState.acIdx = -1;
 }
 
 function hideTagAC() {
@@ -1407,21 +1562,31 @@ function selectTagAC(name) {
 
 function onTagKeydown(e) {
   const inp = e.target;
-  const items = _tagState.acItems;
-  const acVisible = document.getElementById('tag-autocomplete')?.style.display !== 'none';
+  const ac = document.getElementById('tag-autocomplete');
+  const items = ac ? [...ac.querySelectorAll('.autocomplete-item')] : [];
 
-  if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && acVisible) {
+  if (e.key === 'ArrowDown') {
     e.preventDefault();
-    _tagState.acIdx = _moveIdx(_tagState.acIdx, items.length, e.key === 'ArrowDown' ? 1 : -1);
-    _showAC({ acId: 'tag-autocomplete', anchorId: 'tag-editor',
-              items, acIdx: _tagState.acIdx });
+    _tagState.acIdx = Math.min(_tagState.acIdx + 1, items.length - 1);
+    items.forEach((el, i) => el.classList.toggle('hl', i === _tagState.acIdx));
     return;
   }
-
+  if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    _tagState.acIdx = Math.max(_tagState.acIdx - 1, 0);
+    items.forEach((el, i) => el.classList.toggle('hl', i === _tagState.acIdx));
+    return;
+  }
+  if (e.key === 'Escape') {
+    hideTagAC();
+    inp.blur();
+    return;
+  }
   if (e.key === 'Enter' || e.key === ',') {
     e.preventDefault();
     if (_tagState.acIdx >= 0 && items[_tagState.acIdx]) {
-      selectTagAC(items[_tagState.acIdx].name);
+      selectTagAC(items[_tagState.acIdx].dataset.name);
+      _tagState.acIdx = -1;
     } else {
       const val = inp.value.trim();
       if (val && !_tagState.names.includes(val)) {
@@ -1430,23 +1595,16 @@ function onTagKeydown(e) {
         saveTagsDebounced();
       }
       inp.value = '';
-      _refreshTagAC();
+      hideTagAC();
     }
     return;
   }
-
-  if (e.key === 'Escape') {
-    e.stopPropagation(); // prevent global handler from closing detail panel
-    _hideAC('tag-autocomplete');
-    inp.blur();
-    return;
-  }
-
   if (e.key === 'Backspace' && !inp.value && _tagState.names.length) {
     _tagState.names.pop();
     renderTagChips();
     saveTagsDebounced();
   }
+  _tagState.acIdx = -1;
 }
 
 let _tagSaveTimer = null;
@@ -1475,6 +1633,8 @@ function initKwEditor(entryId, kws) {
   renderKwChips();
   const inp = document.getElementById('kw-input');
   inp.addEventListener('keydown', onKwKeydown);
+  inp.addEventListener('input', onKwInput);
+  inp.addEventListener('blur', () => setTimeout(() => hideKwAC(), 150));
 }
 
 function renderKwChips() {
@@ -1491,33 +1651,93 @@ function removeKw(idx) {
   saveKwDebounced();
 }
 
+function onKwInput(e) {
+  const q = e.target.value.toLowerCase();
+  const ac = document.getElementById('kw-autocomplete');
+  if (!q) { hideKwAC(); return; }
+
+  const matches = state.allKeywords
+    .filter(k => k.name.toLowerCase().includes(q) && !_kwState.kws.includes(k.name))
+    .slice(0, 8);
+
+  if (!matches.length) { hideKwAC(); return; }
+  ac.innerHTML = matches.map(k =>
+    `<div class="autocomplete-item" data-name="${esc(k.name)}"
+          onmousedown="event.preventDefault()"
+          onclick="selectKwAC('${esc(k.name)}')">${esc(k.name)}</div>`
+  ).join('');
+  ac.style.display = '';
+  // Position below editor
+  const ed = document.getElementById('kw-wrap');
+  const rect = ed.getBoundingClientRect();
+  const panelRect = document.getElementById('detail-panel').getBoundingClientRect();
+  ac.style.left = (rect.left - panelRect.left) + 'px';
+  ac.style.top  = (rect.bottom - panelRect.top) + 'px';
+  ac.style.width = rect.width + 'px';
+  _kwState.acIdx = -1;
+}
+
+function hideKwAC() {
+  const ac = document.getElementById('kw-autocomplete');
+  if (ac) ac.style.display = 'none';
+}
+
+function selectKwAC(name) {
+  if (!_kwState.kws.includes(name)) {
+    _kwState.kws.push(name);
+    renderKwChips();
+    saveKwDebounced();
+  }
+  const inp = document.getElementById('kw-input');
+  if (inp) { inp.value = ''; inp.focus(); }
+  hideKwAC();
+}
+
 function onKwKeydown(e) {
   const inp = e.target;
-  const items = _kwState.acItems;
-  const acVisible = document.getElementById('kw-autocomplete')?.style.display !== 'none';
+  const ac = document.getElementById('kw-autocomplete');
+  const items = ac ? [...ac.querySelectorAll('.autocomplete-item')] : [];
 
-  if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && acVisible) {
+  if (e.key === 'ArrowDown') {
     e.preventDefault();
-    _kwState.acIdx = _moveIdx(_kwState.acIdx, items.length, e.key === 'ArrowDown' ? 1 : -1);
-    _showAC({ acId: 'kw-autocomplete', anchorId: 'kw-wrap',
-              items, acIdx: _kwState.acIdx });
+    _kwState.acIdx = Math.min((_kwState.acIdx ?? -1) + 1, items.length - 1);
+    items.forEach((el, i) => el.classList.toggle('hl', i === _kwState.acIdx));
     return;
   }
-
+  if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    _kwState.acIdx = Math.max((_kwState.acIdx ?? 0) - 1, 0);
+    items.forEach((el, i) => el.classList.toggle('hl', i === _kwState.acIdx));
+    return;
+  }
+  if (e.key === 'Escape') {
+    hideKwAC();
+    inp.blur();
+    return;
+  }
   if (e.key === 'Enter' || e.key === ',') {
     e.preventDefault();
-    const val = inp.value.trim();
-    if (val && !_kwState.kws.includes(val)) {
-      _kwState.kws.push(val);
-      renderKwChips();
-      saveKwDebounced();
+    if (typeof _kwState.acIdx === 'number' && _kwState.acIdx >= 0 && items[_kwState.acIdx]) {
+      selectKwAC(items[_kwState.acIdx].dataset.name);
+      _kwState.acIdx = -1;
+    } else {
+      const val = inp.value.trim();
+      if (val && !_kwState.kws.includes(val)) {
+        _kwState.kws.push(val);
+        renderKwChips();
+        saveKwDebounced();
+      }
+      inp.value = '';
+      hideKwAC();
     }
-    inp.value = '';
-  } else if (e.key === 'Backspace' && !inp.value && _kwState.kws.length) {
+    return;
+  }
+  if (e.key === 'Backspace' && !inp.value && _kwState.kws.length) {
     _kwState.kws.pop();
     renderKwChips();
     saveKwDebounced();
   }
+  _kwState.acIdx = -1;
 }
 
 let _kwSaveTimer = null;

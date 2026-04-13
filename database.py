@@ -271,7 +271,7 @@ def search_entries(
 
 
 def _fts_search(cur, q: str) -> list[int]:
-    """Substring (LIKE) search across main entry fields."""
+    """部分一致（LIKE）検索。"""
     like = f'%{q}%'
     cur.execute("""
         SELECT id FROM entries
