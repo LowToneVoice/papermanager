@@ -1163,8 +1163,8 @@ function goPage(p) {
 // Detail panel
 // =====================================================================
 async function openDetail(entryId) {
-  // flush any unsaved note BEFORE destroying the current textarea
-  await flushNote();
+  // flush any unsaved changes BEFORE destroying current editors
+  await Promise.all([flushNote(), flushTags(), flushKws()]);
 
   state.currentEntryId = entryId;
   document.querySelectorAll('#entry-list tr').forEach(c => c.classList.remove('active'));
@@ -1180,7 +1180,7 @@ async function openDetail(entryId) {
 }
 
 async function closeDetail() {
-  await flushNote();   // 未保存の変更を即時保存してから閉じる
+  await Promise.all([flushNote(), flushTags(), flushKws()]);  // 未保存の変更を即時保存してから閉じる
   state.currentEntryId = null;
   document.getElementById('detail-panel').classList.remove('open');
   document.querySelectorAll('#entry-list tr').forEach(c => c.classList.remove('active'));
@@ -1618,10 +1618,18 @@ function onTagKeydown(e) {
 let _tagSaveTimer = null;
 function saveTagsDebounced() {
   clearTimeout(_tagSaveTimer);
-  _tagSaveTimer = setTimeout(() => saveTags(), 600);
+  _tagSaveTimer = setTimeout(() => { _tagSaveTimer = null; saveTags(); }, 600);
+}
+
+async function flushTags() {
+  if (_tagSaveTimer === null || !_tagState.entryId) return;
+  clearTimeout(_tagSaveTimer);
+  _tagSaveTimer = null;
+  await saveTags();
 }
 
 async function saveTags() {
+  if (!_tagState.entryId) return;
   await api(`/api/entries/${_tagState.entryId}`, {
     method: 'PATCH',
     headers: {'Content-Type': 'application/json'},
@@ -1751,10 +1759,18 @@ function onKwKeydown(e) {
 let _kwSaveTimer = null;
 function saveKwDebounced() {
   clearTimeout(_kwSaveTimer);
-  _kwSaveTimer = setTimeout(saveKws, 600);
+  _kwSaveTimer = setTimeout(() => { _kwSaveTimer = null; saveKws(); }, 600);
+}
+
+async function flushKws() {
+  if (_kwSaveTimer === null || !_kwState.entryId) return;
+  clearTimeout(_kwSaveTimer);
+  _kwSaveTimer = null;
+  await saveKws();
 }
 
 async function saveKws() {
+  if (!_kwState.entryId) return;
   await api(`/api/entries/${_kwState.entryId}`, {
     method: 'PATCH',
     headers: {'Content-Type': 'application/json'},
