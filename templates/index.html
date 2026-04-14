@@ -664,6 +664,41 @@
     display: none;
   }
 
+  /* ── Add-entry / Manage tabs ── */
+  .add-tab {
+    padding: 5px 14px; font-size: 12px; cursor: pointer;
+    border-radius: var(--radius); border: 1px solid var(--border);
+    background: var(--bg3); color: var(--muted);
+  }
+  .add-tab-active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .add-tab:hover:not(.add-tab-active) { border-color: var(--accent); color: var(--text); }
+
+  /* ── Meta / Add entry form rows ── */
+  .meta-edit-form { display: flex; flex-direction: column; gap: 6px; }
+  .meta-edit-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .meta-edit-row label { width: 72px; flex-shrink: 0; color: var(--muted); font-size: 12px; }
+  .meta-edit-row input, .meta-edit-row select, .meta-edit-row textarea {
+    flex: 1; min-width: 0; background: var(--bg3);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    color: var(--text); padding: 4px 8px; font-size: 13px;
+  }
+  .meta-edit-row input:focus, .meta-edit-row select:focus, .meta-edit-row textarea:focus {
+    border-color: var(--accent); outline: none;
+  }
+  .meta-edit-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+
+  /* ── Duplicate-check modal ── */
+  .dupe-group { border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 12px; overflow: hidden; }
+  .dupe-group-header { padding: 6px 12px; font-size: 12px; color: var(--muted); background: var(--bg3); }
+  .dupe-entry { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--border); }
+  .dupe-entry-info { flex: 1; min-width: 0; }
+  .dupe-entry-title { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dupe-entry-sub { font-size: 11px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* ── Manage tags/keywords modal ── */
+  .manage-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+  .manage-name { flex: 1; min-width: 0; font-size: 13px; }
+
   /* Responsive: when detail panel is open, shrink list */
   .detail-panel.open ~ * { /* not needed; overlay approach */ }
 </style>
@@ -765,6 +800,102 @@
     <div class="import-result" id="import-result"></div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
       <button class="btn" onclick="closeImportModal()">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── NOTION CSV MODAL ── -->
+<div class="modal-overlay" id="notion-modal">
+  <div class="modal">
+    <h3>📥 Notion CSV をインポート</h3>
+    <div class="drop-zone" id="notion-drop-zone" onclick="document.getElementById('notion-file-input').click()">
+      クリックまたはドラッグ＆ドロップ<br>
+      <small style="font-size:11px;margin-top:4px;display:block;">Notion のエクスポートCSVを選択</small>
+    </div>
+    <input type="file" id="notion-file-input" accept=".csv" style="display:none">
+    <div class="import-result" id="notion-result"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+      <button class="btn" onclick="closeNotionModal()">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── ADD ENTRY MODAL ── -->
+<div class="modal-overlay" id="add-modal">
+  <div class="modal" style="width:520px;max-height:90vh;overflow-y:auto;">
+    <h3>＋ 文献を追加</h3>
+    <div style="display:flex;gap:4px;margin-bottom:14px;">
+      <button class="add-tab add-tab-active" id="add-tab-bib"  onclick="switchAddTab('bib')">BibTeX</button>
+      <button class="add-tab"                id="add-tab-form" onclick="switchAddTab('form')">フォーム入力</button>
+    </div>
+    <!-- BibTeX tab -->
+    <div id="add-panel-bib" style="display:flex;flex-direction:column;gap:8px;">
+      <textarea id="add-bibtex-input" rows="7"
+        style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:8px;font-family:var(--font-mono);font-size:12px;resize:vertical;box-sizing:border-box;"
+        placeholder="@article{key,&#10;  title = {タイトル},&#10;  author = {著者},&#10;  year = {2024}&#10;}"></textarea>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <button class="btn" onclick="parseBibtexAndFill()">解析 →</button>
+        <span id="add-parse-status" style="font-size:12px;color:var(--muted);"></span>
+      </div>
+    </div>
+    <!-- Form tab -->
+    <div id="add-panel-form" style="display:none;flex-direction:column;gap:4px;">
+      <div class="meta-edit-row"><label>種別</label>
+        <select id="add-entry-type">
+          <option value="article">article</option><option value="misc">misc</option>
+          <option value="book">book</option><option value="inproceedings">inproceedings</option>
+          <option value="incollection">incollection</option><option value="phdthesis">phdthesis</option>
+          <option value="mastersthesis">mastersthesis</option><option value="unpublished">unpublished</option>
+          <option value="inbook">inbook</option>
+        </select>
+      </div>
+      <div class="meta-edit-row"><label>cite key</label><input id="add-cite-key" placeholder="必須"></div>
+      <div class="meta-edit-row"><label>タイトル</label><input id="add-title"></div>
+      <div class="meta-edit-row"><label>著者</label><input id="add-author" placeholder="Last, First and Last2, First2"></div>
+      <div class="meta-edit-row"><label>年</label><input id="add-year" type="number" min="1000" max="2100" style="width:90px;"></div>
+      <div class="meta-edit-row"><label>月</label><input id="add-month" placeholder="jan / 01 etc."></div>
+      <div class="meta-edit-row"><label>掲載誌</label><input id="add-journal"></div>
+      <div class="meta-edit-row"><label>巻</label><input id="add-volume"></div>
+      <div class="meta-edit-row"><label>号</label><input id="add-number"></div>
+      <div class="meta-edit-row"><label>ページ</label><input id="add-pages"></div>
+      <div class="meta-edit-row"><label>DOI</label><input id="add-doi"></div>
+      <div class="meta-edit-row"><label>arXiv</label><input id="add-eprint" placeholder="2301.12345"></div>
+      <div class="meta-edit-row"><label>URL</label><input id="add-url"></div>
+      <div class="meta-edit-row" style="align-items:start;">
+        <label style="padding-top:6px;">Abstract</label>
+        <textarea id="add-abstract" rows="3"></textarea>
+      </div>
+    </div>
+    <div id="add-error" style="color:var(--red);font-size:12px;min-height:18px;margin-top:8px;"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px;">
+      <button class="btn" onclick="closeAddModal()">キャンセル</button>
+      <button class="btn btn-primary" onclick="submitNewEntry()">追加</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── DUPLICATE CHECK MODAL ── -->
+<div class="modal-overlay" id="dupes-modal">
+  <div class="modal" style="width:640px;max-height:80vh;display:flex;flex-direction:column;">
+    <h3>⚠ 重複チェック</h3>
+    <div id="dupes-body" style="flex:1;overflow-y:auto;min-height:60px;"></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:12px;">
+      <button class="btn" onclick="closeDupesModal()">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MANAGE TAGS / KEYWORDS MODAL ── -->
+<div class="modal-overlay" id="manage-modal">
+  <div class="modal" style="width:480px;max-height:80vh;display:flex;flex-direction:column;">
+    <h3 id="manage-modal-title">タグ管理</h3>
+    <div style="display:flex;gap:4px;margin-bottom:12px;">
+      <button class="add-tab add-tab-active" id="manage-tab-tags" onclick="switchManageTab('tags')">タグ</button>
+      <button class="add-tab"                id="manage-tab-kws"  onclick="switchManageTab('kws')">キーワード</button>
+    </div>
+    <div id="manage-list" style="flex:1;overflow-y:auto;"></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:12px;">
+      <button class="btn" onclick="closeManageModal()">閉じる</button>
     </div>
   </div>
 </div>
