@@ -260,8 +260,11 @@ def api_import():
     text = f.read().decode('utf-8', errors='replace')
     entries = parse_bib_string(text)
     conn = db.get_conn()
-    summary = import_entries_to_db(entries, conn)
-    conn.close()
+    try:
+        summary = import_entries_to_db(entries, conn)
+        conn.commit()
+    finally:
+        conn.close()
     return jsonify(summary)
 
 
