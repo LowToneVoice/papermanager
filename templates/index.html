@@ -1016,9 +1016,14 @@ function renderTable() {
 
   // Client-side sort
   const sorted = [..._cachedEntries].sort((a, b) => {
-    let va = a[state.sortCol] ?? '';
-    let vb = b[state.sortCol] ?? '';
-    if (state.sortCol === 'year') { va = va || 0; vb = vb || 0; }
+    let va, vb;
+    if (state.sortCol === 'year') {
+      va = getYYYYMM(a);
+      vb = getYYYYMM(b);
+    } else {
+      va = a[state.sortCol] ?? '';
+      vb = b[state.sortCol] ?? '';
+    }
     if (va < vb) return -state.sortDir;
     if (va > vb) return  state.sortDir;
     return 0;
@@ -1183,6 +1188,9 @@ async function closeDetail() {
 
 function renderDetail(e) {
   document.getElementById('detail-heading').textContent = e.title || e.cite_key;
+  // Reset edit button state whenever a new entry is rendered
+  const editBtn = document.getElementById('btn-edit-meta');
+  if (editBtn) editBtn.textContent = '✏ 編集';
 
   const arxivUrl = e.eprint ? `https://arxiv.org/abs/${e.eprint}` : null;
   const linkUrl  = e.doi ? `https://doi.org/${e.doi}` : (e.url || arxivUrl || null);
@@ -1288,7 +1296,7 @@ function renderDetail(e) {
       </div>
     </div>
 
-    ${e.abstract && !document.getElementById('meta-edit-section')?.style.display ? `
+    ${e.abstract ? `
     <div class="detail-section" id="abstract-section">
       <div class="detail-section-title">📝 アブストラクト</div>
       <div class="abstract-text">${esc(e.abstract)}</div>
