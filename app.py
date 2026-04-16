@@ -25,6 +25,11 @@ app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024  # 32 MB upload limit
 db.init_db()
 
 
+@app.teardown_appcontext
+def teardown_db(e=None):
+    db.close_db(e)
+
+
 # ---------------------------------------------------------------------------
 # Main UI
 # ---------------------------------------------------------------------------
@@ -260,11 +265,7 @@ def api_import():
     text = f.read().decode('utf-8', errors='replace')
     entries = parse_bib_string(text)
     conn = db.get_conn()
-    try:
-        summary = import_entries_to_db(entries, conn)
-        conn.commit()
-    finally:
-        conn.close()
+    summary = import_entries_to_db(entries, conn)
     return jsonify(summary)
 
 
