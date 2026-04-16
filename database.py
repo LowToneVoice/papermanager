@@ -8,13 +8,39 @@ from pathlib import Path
 DB_PATH = Path(__file__).parent / "bibmanager.db"
 
 
-def get_conn() -> sqlite3.Connection:
+def _open_conn() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=30000")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
+
+
+def get_conn() -> sqlite3.Connection:
+    """Return the per-request shared connection (via Flask g).
+    Falls back to a direct connection when called outside request context
+    (e.g. init_db at startup).
+    """
+    try:
+        from flask import g
+        if not hasattr(g, '_db'):
+            g._db = _open_conn()
+        return g._db
+    except RuntimeError:
+        # Outside application context (init_db called at module level)
+        return _open_conn()
+
+
+def close_db(e=None):
+    """Close the per-request connection. Register with app.teardown_appcontext."""
+    try:
+        from flask import g
+        db_conn = g.pop('_db', None)
+        if db_conn is not None:
+            db_conn.close()
+    except RuntimeError:
+        pass
 
 
 def init_db():
@@ -171,7 +197,6 @@ def search_entries(
         note_ids = _note_search(cur, q)
         all_ids = list(set(fts_ids) | set(note_ids))
         if not all_ids:
-            conn.close()
             return [], 0
         placeholders = ','.join('?' * len(all_ids))
         where_clauses.append(f"e.id IN ({placeholders})")
@@ -267,7 +292,6 @@ def search_entries(
             row['tags'] = []; row['keywords'] = []
             row['reading_note'] = ''; row['citations_text'] = ''; row['citation_count'] = 0
 
-    conn.close()
     return rows, total
 
 
@@ -305,7 +329,6 @@ def get_entry(entry_id: int) -> dict | None:
     cur.execute("SELECT * FROM entries WHERE id = ?", (entry_id,))
     row = cur.fetchone()
     if not row:
-        conn.close()
         return None
     entry = dict(row)
 
@@ -337,7 +360,6 @@ def get_entry(entry_id: int) -> dict | None:
     """, (entry_id,))
     entry['citations'] = [dict(r) for r in cur.fetchall()]
 
-    conn.close()
     return entry
 
 
@@ -356,7 +378,6 @@ def get_all_tags() -> list[dict]:
         ORDER BY t.name
     """)
     rows = [dict(r) for r in cur.fetchall()]
-    conn.close()
     return rows
 
 
@@ -371,7 +392,6 @@ def get_or_create_tag(name: str) -> int:
         cur.execute("INSERT INTO tags (name) VALUES (?)", (name.strip(),))
         tag_id = cur.lastrowid
     conn.commit()
-    conn.close()
     return tag_id
 
 
@@ -395,21 +415,18 @@ def set_entry_tags(entry_id: int, tag_names: list[str]):
             (entry_id, tag_id)
         )
     conn.commit()
-    conn.close()
 
 
 def delete_tag(tag_id: int):
     conn = get_conn()
     conn.execute("DELETE FROM tags WHERE id = ?", (tag_id,))
     conn.commit()
-    conn.close()
 
 
 def rename_tag(tag_id: int, new_name: str):
     conn = get_conn()
     conn.execute("UPDATE tags SET name = ? WHERE id = ?", (new_name.strip(), tag_id))
     conn.commit()
-    conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -427,7 +444,6 @@ def get_all_keywords() -> list[dict]:
         ORDER BY kl.name
     """)
     rows = [dict(r) for r in cur.fetchall()]
-    conn.close()
     return rows
 
 
@@ -442,7 +458,6 @@ def get_or_create_keyword(name: str) -> int:
         cur.execute("INSERT INTO keyword_list (name) VALUES (?)", (name.strip(),))
         kw_id = cur.lastrowid
     conn.commit()
-    conn.close()
     return kw_id
 
 
@@ -466,21 +481,18 @@ def set_entry_keywords(entry_id: int, kw_names: list[str]):
             (entry_id, kw_id)
         )
     conn.commit()
-    conn.close()
 
 
 def delete_keyword(kw_id: int):
     conn = get_conn()
     conn.execute("DELETE FROM keyword_list WHERE id = ?", (kw_id,))
     conn.commit()
-    conn.close()
 
 
 def rename_keyword(kw_id: int, new_name: str):
     conn = get_conn()
     conn.execute("UPDATE keyword_list SET name = ? WHERE id = ?", (new_name.strip(), kw_id))
     conn.commit()
-    conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -503,7 +515,6 @@ def set_reading_note(entry_id: int, content: str):
             (entry_id, content)
         )
     conn.commit()
-    conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -519,7 +530,6 @@ def add_citation(entry_id: int, source_cite_key: str, source_title: str, content
     """, (entry_id, source_cite_key, source_title, content))
     new_id = cur.lastrowid
     conn.commit()
-    conn.close()
     return new_id
 
 
@@ -531,14 +541,12 @@ def update_citation(cit_id: int, source_cite_key: str, source_title: str, conten
         WHERE id = ?
     """, (source_cite_key, source_title, content, cit_id))
     conn.commit()
-    conn.close()
 
 
 def delete_citation(cit_id: int):
     conn = get_conn()
     conn.execute("DELETE FROM citations_in_other_papers WHERE id = ?", (cit_id,))
     conn.commit()
-    conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -565,7 +573,6 @@ def create_entry(fields: dict) -> dict:
     cur = conn.cursor()
     cur.execute("SELECT id FROM entries WHERE cite_key = ?", (cite_key,))
     if cur.fetchone():
-        conn.close()
         raise ValueError(f'cite_key "{cite_key}" は既に存在します')
 
     parts = re.split(r'\s+and\s+', fields.get('author', '') or '', flags=re.IGNORECASE)
@@ -602,7 +609,6 @@ def create_entry(fields: dict) -> dict:
     """, row)
     new_id = cur.lastrowid
     conn.commit()
-    conn.close()
     return get_entry(new_id)
 
 
@@ -617,7 +623,6 @@ def update_entry_meta(entry_id: int, fields: dict) -> dict | None:
     cur.execute("SELECT * FROM entries WHERE id = ?", (entry_id,))
     row = cur.fetchone()
     if not row:
-        conn.close()
         return None
 
     current = dict(row)
@@ -644,7 +649,6 @@ def update_entry_meta(entry_id: int, fields: dict) -> dict | None:
         WHERE id=:id
     """, {**current, 'id': entry_id})
     conn.commit()
-    conn.close()
     return get_entry(entry_id)
 
 
@@ -675,7 +679,6 @@ def delete_entry(entry_id: int):
     conn = get_conn()
     conn.execute("DELETE FROM entries WHERE id = ?", (entry_id,))
     conn.commit()
-    conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -697,7 +700,6 @@ def find_duplicates() -> list[list[dict]]:
         FROM entries ORDER BY year, cite_key
     """)
     rows = [dict(r) for r in cur.fetchall()]
-    conn.close()
 
     def _norm(t):
         return re.sub(r'[^a-z0-9]', '', (t or '').lower())
@@ -741,7 +743,6 @@ def export_all_bibtex() -> str:
     cur = conn.cursor()
     cur.execute("SELECT raw_bibtex FROM entries ORDER BY year, cite_key")
     parts = [row[0] for row in cur.fetchall() if row[0]]
-    conn.close()
     return '\n\n'.join(parts)
 
 
@@ -756,5 +757,4 @@ def get_stats() -> dict:
     total = cur.fetchone()[0]
     cur.execute("SELECT year, COUNT(*) as c FROM entries WHERE year IS NOT NULL GROUP BY year ORDER BY year")
     by_year = [dict(r) for r in cur.fetchall()]
-    conn.close()
     return {'total': total, 'by_year': by_year}
