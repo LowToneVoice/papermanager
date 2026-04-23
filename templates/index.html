@@ -95,8 +95,7 @@
   .btn-primary:hover { background: #3a7de8; }
   .btn-danger  { color: var(--red); }
   .btn-danger:hover { border-color: var(--red); }
-  .btn-notion { background: var(--bg3); border-color: #555; color: var(--text); }
-  .btn-notion:hover { border-color: var(--accent2); }
+
 
   /* ── Main layout ── */
   .main {
@@ -214,6 +213,7 @@
   .entry-list {
     flex: 1;
     overflow-y: auto;
+    overflow-x: auto;
     padding: 8px;
   }
 
@@ -230,6 +230,7 @@
   /* ── Table view ── */
   .entry-table {
     width: 100%;
+    min-width: 960px;
     border-collapse: collapse;
     font-size: 13px;
   }
@@ -277,35 +278,50 @@
     font-size: 12px;
   }
   .td-title {
-    min-width: 180px;
-    max-width: 280px;
+    width: 200px;
+    max-width: 200px;
   }
   .td-title-text {
     font-weight: 600;
     overflow: hidden;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 188px;
   }
   .td-authors {
-    width: 140px;
-    max-width: 140px;
-    color: var(--muted);
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
+    width: 150px;
+    max-width: 150px;
     font-size: 12px;
   }
-  .td-tags { width: 120px; }
+  .td-authors-inner {
+    color: var(--muted);
+    max-height: 66px;
+    overflow-y: auto;
+    line-height: 1.55;
+  }
+  .td-authors-inner .au-line {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 138px;
+  }
+  .td-authors-inner .au-more {
+    color: var(--accent);
+    font-size: 11px;
+  }
+  .td-tags { width: 110px; }
   .td-tags-wrap { display: flex; flex-wrap: wrap; gap: 3px; }
   .td-note {
-    max-width: 200px;
+    width: 170px;
+    max-width: 170px;
     font-size: 12px;
     color: var(--muted);
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
+  }
+  .td-note-inner {
+    max-height: 80px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
   }
   .entry-year {
     font-size: 12px;
@@ -717,8 +733,7 @@
   <div class="header-actions">
     <button class="btn btn-primary" id="btn-add">＋ 文献を追加</button>
     <button class="btn" id="btn-import">⬆ Import .bib</button>
-    <button class="btn btn-notion" id="btn-notion">📥 Notion CSV</button>
-    <button class="btn" id="btn-export">⬇ Export .bib</button>
+<button class="btn" id="btn-export">⬇ Export .bib</button>
     <button class="btn" id="btn-dupes" title="重複を検出する">⚠ 重複チェック</button>
   </div>
 </header>
@@ -745,20 +760,26 @@
     <div class="sidebar-section" style="border-bottom:none; padding-bottom:4px;">
       <div class="sidebar-label">
         <span>タグ</span>
-        <span id="tag-clear" style="cursor:pointer;color:var(--muted);font-size:10px;display:none;" onclick="clearTagFilter()">クリア</span>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <span id="tag-clear" style="cursor:pointer;color:var(--muted);font-size:10px;display:none;" onclick="clearTagFilter()">クリア</span>
+          <span style="cursor:pointer;color:var(--muted);font-size:10px;" onclick="openManageModal('tags')" title="タグを管理">⚙</span>
+        </div>
       </div>
     </div>
-    <div class="tags-list" id="tags-list">
+    <div class="filter-list" id="tags-list">
       <div style="color:var(--muted);font-size:12px;padding:8px;">読み込み中…</div>
     </div>
 
-    <div class="sidebar-section" style="border-bottom:none; padding-bottom:4px;">
+    <div class="sidebar-section" style="border-top:1px solid var(--border); border-bottom:none; padding-bottom:4px;">
       <div class="sidebar-label">
         <span>キーワード</span>
-        <span id="kw-clear" style="cursor:pointer;color:var(--muted);font-size:10px;display:none;" onclick="clearKwFilter()">クリア</span>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <span id="kw-clear" style="cursor:pointer;color:var(--muted);font-size:10px;display:none;" onclick="clearKwFilter()">クリア</span>
+          <span style="cursor:pointer;color:var(--muted);font-size:10px;" onclick="openManageModal('kws')" title="キーワードを管理">⚙</span>
+        </div>
       </div>
     </div>
-    <div class="tags-list" id="keywords-list">
+    <div class="filter-list kw-list" id="keywords-list">
       <div style="color:var(--muted);font-size:12px;padding:8px;">読み込み中…</div>
     </div>
   </aside>
@@ -804,21 +825,6 @@
   </div>
 </div>
 
-<!-- ── NOTION CSV MODAL ── -->
-<div class="modal-overlay" id="notion-modal">
-  <div class="modal">
-    <h3>📥 Notion CSV をインポート</h3>
-    <div class="drop-zone" id="notion-drop-zone" onclick="document.getElementById('notion-file-input').click()">
-      クリックまたはドラッグ＆ドロップ<br>
-      <small style="font-size:11px;margin-top:4px;display:block;">Notion のエクスポートCSVを選択</small>
-    </div>
-    <input type="file" id="notion-file-input" accept=".csv" style="display:none">
-    <div class="import-result" id="notion-result"></div>
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
-      <button class="btn" onclick="closeNotionModal()">閉じる</button>
-    </div>
-  </div>
-</div>
 
 <!-- ── ADD ENTRY MODAL ── -->
 <div class="modal-overlay" id="add-modal">
@@ -976,8 +982,7 @@ function bindEvents() {
   // Import / Export
   document.getElementById('btn-add').onclick    = () => openAddModal();
   document.getElementById('btn-import').onclick = () => openImportModal();
-  document.getElementById('btn-notion').onclick = () => openNotionModal();
-  document.getElementById('btn-export').onclick = () => { window.location = '/api/export'; };
+document.getElementById('btn-export').onclick = () => { window.location = '/api/export'; };
   document.getElementById('btn-dupes').onclick  = () => openDupesModal();
 
   // .bib Drop zone
@@ -994,19 +999,7 @@ function bindEvents() {
     if (e.target.files[0]) importBibFile(e.target.files[0]);
   });
 
-  // Notion CSV Drop zone
-  const ndz = document.getElementById('notion-drop-zone');
-  ndz.addEventListener('dragover', e => { e.preventDefault(); ndz.classList.add('over'); });
-  ndz.addEventListener('dragleave', () => ndz.classList.remove('over'));
-  ndz.addEventListener('drop', e => {
-    e.preventDefault();
-    ndz.classList.remove('over');
-    const f = e.dataTransfer.files[0];
-    if (f) importNotionFile(f);
-  });
-  document.getElementById('notion-file-input').addEventListener('change', e => {
-    if (e.target.files[0]) importNotionFile(e.target.files[0]);
-  });
+
 }
 
 // =====================================================================
@@ -1189,11 +1182,11 @@ function renderTable() {
                 class="${state.currentEntryId === e.id ? 'active' : ''}">
       <td class="td-yyyymm">${yyyymm}</td>
       <td class="td-title"><div class="td-title-text">${esc(e.title || '(タイトルなし)')}</div></td>
-      <td class="td-authors">${esc(authors)}</td>
+      <td class="td-authors">${formatAuthorsTable(e.author)}</td>
       <td class="td-tags"><div class="td-tags-wrap">${tags}</div></td>
       <td class="td-tags"><div class="td-tags-wrap">${kws}</div></td>
-      <td class="td-note">${esc(e.reading_note || '')}</td>
-      <td class="td-note">${esc(e.citations_text || '')}</td>
+      <td class="td-note"><div class="td-note-inner">${esc(e.reading_note || '')}</div></td>
+      <td class="td-note"><div class="td-note-inner">${esc(e.citations_text || '')}</div></td>
     </tr>`;
   }).join('');
 
@@ -1268,11 +1261,27 @@ function entryCardHTML(e) {
   </div>`;
 }
 
+function _splitAuthors(authorStr) {
+  if (!authorStr) return [];
+  return authorStr.split(/\s+and\s+/i).map(a => a.trim()).filter(Boolean);
+}
+
 function formatAuthors(authorStr) {
   if (!authorStr) return '著者不明';
-  const parts = authorStr.split(' | ');
+  const parts = _splitAuthors(authorStr);
   if (parts.length <= 3) return parts.join(', ');
   return parts.slice(0, 3).join(', ') + ` et al. (${parts.length}名)`;
+}
+
+function formatAuthorsTable(authorStr) {
+  if (!authorStr) return '<div class="td-authors-inner"><div class="au-line">著者不明</div></div>';
+  const parts = _splitAuthors(authorStr);
+  const MAX = 6;
+  const shown = parts.slice(0, MAX);
+  const rest  = parts.length - MAX;
+  let html = shown.map(a => `<div class="au-line">${esc(a)}</div>`).join('');
+  if (rest > 0) html += `<div class="au-more">他 ${rest} 名</div>`;
+  return `<div class="td-authors-inner">${html}</div>`;
 }
 
 function renderPagination(total) {
@@ -1585,6 +1594,7 @@ function _showAC({ acId, anchorId, items, acIdx }) {
   ac.innerHTML = items.map((item, i) =>
     `<div class="autocomplete-item${i === acIdx ? ' hl' : ''}"
           data-idx="${i}"
+          data-name="${esc(item.name)}"
           onmousedown="event.preventDefault()"
           onclick="_acItemClick('${acId}','${esc(item.name)}')"
      >${esc(item.name)}</div>`
@@ -1725,8 +1735,10 @@ function onTagKeydown(e) {
   }
   if (e.key === 'Enter' || e.key === ',') {
     e.preventDefault();
-    if (_tagState.acIdx >= 0 && items[_tagState.acIdx]) {
-      selectTagAC(items[_tagState.acIdx].dataset.name);
+    const selTagName = _tagState.acIdx >= 0 && items[_tagState.acIdx]
+      ? items[_tagState.acIdx].dataset.name : null;
+    if (selTagName) {
+      selectTagAC(selTagName);
       _tagState.acIdx = -1;
     } else {
       const val = inp.value.trim();
@@ -1783,6 +1795,7 @@ function initKwEditor(entryId, kws) {
   const inp = document.getElementById('kw-input');
   inp.addEventListener('keydown', onKwKeydown);
   inp.addEventListener('input', onKwInput);
+  inp.addEventListener('focus', onKwFocus);
   inp.addEventListener('blur', () => setTimeout(() => hideKwAC(), 150));
 }
 
@@ -1800,14 +1813,22 @@ function removeKw(idx) {
   saveKwDebounced();
 }
 
+function onKwFocus() {
+  const inp = document.getElementById('kw-input');
+  if (!inp.value) _showKwAC('');
+}
+
 function onKwInput(e) {
   const q = e.target.value.toLowerCase();
+  _showKwAC(q);
+}
+
+function _showKwAC(q) {
   const ac = document.getElementById('kw-autocomplete');
-  if (!q) { hideKwAC(); return; }
 
   const matches = state.allKeywords
-    .filter(k => k.name.toLowerCase().includes(q) && !_kwState.kws.includes(k.name))
-    .slice(0, 8);
+    .filter(k => (q ? k.name.toLowerCase().includes(q) : true) && !_kwState.kws.includes(k.name))
+    .slice(0, 12);
 
   if (!matches.length) { hideKwAC(); return; }
   ac.innerHTML = matches.map(k =>
@@ -1866,8 +1887,10 @@ function onKwKeydown(e) {
   }
   if (e.key === 'Enter' || e.key === ',') {
     e.preventDefault();
-    if (typeof _kwState.acIdx === 'number' && _kwState.acIdx >= 0 && items[_kwState.acIdx]) {
-      selectKwAC(items[_kwState.acIdx].dataset.name);
+    const selKwName = _kwState.acIdx >= 0 && items[_kwState.acIdx]
+      ? items[_kwState.acIdx].dataset.name : null;
+    if (selKwName) {
+      selectKwAC(selKwName);
       _kwState.acIdx = -1;
     } else {
       const val = inp.value.trim();
@@ -2125,42 +2148,6 @@ async function importBibFile(file) {
   }
 }
 
-// =====================================================================
-// Notion CSV import modal
-// =====================================================================
-function openNotionModal() {
-  document.getElementById('notion-modal').classList.add('open');
-  document.getElementById('notion-result').style.display = 'none';
-  document.getElementById('notion-file-input').value = '';
-}
-
-function closeNotionModal() {
-  document.getElementById('notion-modal').classList.remove('open');
-  loadEntries();
-  loadTags();
-  loadKeywords();
-  loadStats();
-}
-
-async function importNotionFile(file) {
-  const fd = new FormData();
-  fd.append('file', file);
-  const res = document.getElementById('notion-result');
-  res.style.display = '';
-  res.innerHTML = '<span class="spinner"></span> インポート中…';
-  try {
-    const data = await fetch('/api/notion-import', { method: 'POST', body: fd }).then(r => r.json());
-    let html = `✅ マッチ: <b>${data.matched}</b>件　未マッチ: <b>${data.not_found}</b>件`;
-    if (data.errors && data.errors.length) {
-      html += `<div class="notion-errors">${data.errors.map(e => esc(e)).join('<br>')}</div>`;
-    }
-    res.innerHTML = html;
-    showToast('Notionインポート完了', 'ok');
-  } catch (err) {
-    res.innerHTML = '❌ インポートに失敗しました: ' + err.message;
-    showToast('インポート失敗', 'err');
-  }
-}
 
 // =====================================================================
 // Toast
