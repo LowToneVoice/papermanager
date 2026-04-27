@@ -717,7 +717,37 @@
 
   /* Responsive: when detail panel is open, shrink list */
   .detail-panel.open ~ * { /* not needed; overlay approach */ }
+  /* ── Rich content preview (Markdown + LaTeX) ── */
+  .note-preview {
+    margin-top: 8px;
+    padding: 10px 12px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 13px;
+    line-height: 1.75;
+    color: var(--text);
+    min-height: 32px;
+    word-break: break-word;
+  }
+  .note-preview p:first-child, .rendered-content p:first-child { margin-top: 0; }
+  .note-preview p:last-child,  .rendered-content p:last-child  { margin-bottom: 0; }
+  .note-preview p, .rendered-content p { margin: 0.4em 0; }
+  .note-preview strong, .rendered-content strong { color: #e8e8f0; }
+  .note-preview code, .rendered-content code {
+    background: var(--bg); padding: 1px 5px; border-radius: 3px; font-size: 0.9em;
+  }
+  .note-preview pre, .rendered-content pre {
+    background: var(--bg); padding: 8px 10px; border-radius: 4px; overflow-x: auto;
+  }
+  .rendered-content { line-height: 1.75; font-size: 13px; word-break: break-word; }
+  .katex-display { overflow-x: auto; overflow-y: hidden; }
 </style>
+<!-- Markdown & LaTeX rendering -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
+<script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"></script>
 </head>
 <body>
 
@@ -1328,6 +1358,41 @@ async function closeDetail() {
   document.querySelectorAll('#entry-list tr').forEach(c => c.classList.remove('active'));
 }
 
+// =====================================================================
+// Rich text rendering: Markdown + LaTeX (KaTeX)
+// =====================================================================
+const _katexOpts = {
+  delimiters: [
+    { left: '$$', right: '$$', display: true  },
+    { left: '$',  right: '$',  display: false },
+    { left: '\\(', right: '\\)', display: false },
+    { left: '\\[', right: '\\]', display: true  },
+  ],
+  throwOnError: false,
+};
+
+function renderRich(text) {
+  if (!text) return '';
+  // 1. Markdown → HTML
+  let html;
+  if (typeof marked !== 'undefined') {
+    html = marked.parse(text, { breaks: true, gfm: true });
+  } else {
+    // Fallback: minimal bold/italic/newline if marked.js not loaded yet
+    html = esc(text)
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      .replace(/\n/g, '<br>');
+  }
+  // 2. LaTeX → KaTeX
+  const div = document.createElement('div');
+  div.innerHTML = html;
+  if (typeof renderMathInElement !== 'undefined') {
+    renderMathInElement(div, _katexOpts);
+  }
+  return div.innerHTML;
+}
+
 function renderDetail(e) {
   document.getElementById('detail-heading').textContent = e.title || e.cite_key;
   // Reset edit button state whenever a new entry is rendered
@@ -1471,7 +1536,10 @@ function renderDetail(e) {
         <span id="note-save-status" style="font-size:11px;font-weight:400;margin-left:auto;color:var(--muted);"></span>
       </div>
       <textarea class="note-area" id="reading-note" rows="5"
-        placeholder="自分の読書メモ…">${esc(e.reading_note?.content || '')}</textarea>
+        placeholder="自分の読書メモ… （**太字**, *斜体*, $数式$, $$ブロック数式$$）">${esc(e.reading_note?.content || '')}</textarea>
+      ${e.reading_note?.content
+        ? `<div id="note-preview" class="note-preview">${renderRich(e.reading_note.content)}</div>`
+        : `<div id="note-preview" class="note-preview" style="display:none"></div>`}
     </div>
 
     <!-- Citations in other papers -->
@@ -1964,11 +2032,23 @@ function initNoteEditor(entryId, initialContent) {
   const ta = document.getElementById('reading-note');
   if (!ta) return;
 
+  function _updateNotePreview() {
+    const preview = document.getElementById('note-preview');
+    if (!preview) return;
+    if (ta.value) {
+      preview.innerHTML = renderRich(ta.value);
+      preview.style.display = '';
+    } else {
+      preview.style.display = 'none';
+    }
+  }
+
   ta.addEventListener('input', () => {
     _note.pendingContent = ta.value;
     clearTimeout(_note.timer);
     _note.timer = setTimeout(() => _doSaveNote(), 800);
     _updateNoteSaveIndicator('unsaved');
+    _updateNotePreview();
   });
 
   // Ctrl+Enter = save immediately and blur
@@ -2031,7 +2111,7 @@ function citationCardHTML(c) {
   const src = [c.source_cite_key, c.source_title].filter(Boolean).join(' / ');
   return `<div class="citation-card" id="cit-${c.id}">
     ${src ? `<div class="citation-source">出典：${esc(src)}</div>` : ''}
-    <div style="font-size:13px;white-space:pre-wrap;">${esc(c.content || '')}</div>
+    <div class="rendered-content">${renderRich(c.content || '')}</div>
     <div class="citation-actions">
       <button class="btn" style="font-size:11px;" onclick="editCitationForm(${c.id},'${esc2(c.source_cite_key)}','${esc2(c.source_title)}','${esc2(c.content)}')">編集</button>
       <button class="btn btn-danger" style="font-size:11px;" onclick="deleteCitation(${c.id},${state.currentEntryId})">削除</button>
