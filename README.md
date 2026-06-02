@@ -16,6 +16,7 @@ pip install flask
 
 ```bash
 cd bibmanager
+source venv/bin/activate
 python app.py
 ```
 
