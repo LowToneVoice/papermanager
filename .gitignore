@@ -1,1 +1,20 @@
 *.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+cenv/
+.venv/
+env/
+
+# Claude Code internal files
+.claude/
+
+# IDE
+.vscode/
+.idea/

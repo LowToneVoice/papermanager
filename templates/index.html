@@ -748,6 +748,7 @@
 <script defer src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js" crossorigin="anonymous"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js" crossorigin="anonymous"></script>
 </head>
 <body>
 
@@ -1384,13 +1385,23 @@ function renderRich(text) {
       .replace(/\*(.+?)\*/g, '<em>$1</em>')
       .replace(/\n/g, '<br>');
   }
-  // 2. LaTeX → KaTeX
+  // 2. Sanitize HTML before touching the DOM (prevents stored XSS)
+  const clean = (typeof DOMPurify !== 'undefined')
+    ? DOMPurify.sanitize(html)
+    : html;
+  // 3. LaTeX → KaTeX
   const div = document.createElement('div');
-  div.innerHTML = html;
+  div.innerHTML = clean;
   if (typeof renderMathInElement !== 'undefined') {
     renderMathInElement(div, _katexOpts);
   }
   return div.innerHTML;
+}
+
+// Allow only http/https URLs in href attributes (blocks javascript: URIs)
+function safeHref(url) {
+  if (!url) return null;
+  return /^https?:\/\//i.test(url.trim()) ? url.trim() : null;
 }
 
 function renderDetail(e) {
@@ -1410,7 +1421,7 @@ function renderDetail(e) {
     ['ページ', e.pages   || '–'],
     ['DOI',    e.doi    ? `<a href="https://doi.org/${e.doi}" target="_blank">${esc(e.doi)}</a>` : '–'],
     ['arXiv',  e.eprint ? `<a href="https://arxiv.org/abs/${e.eprint}" target="_blank">${esc(e.eprint)}</a>` : '–'],
-    ['URL',    e.url    ? `<a href="${esc(e.url)}" target="_blank">リンク</a>` : '–'],
+    ['URL',    safeHref(e.url) ? `<a href="${esc(safeHref(e.url))}" target="_blank">リンク</a>` : '–'],
   ];
 
   const metaHTML = metaRows.filter(([,v]) => v && v !== '–').map(([l,v]) =>
@@ -1431,7 +1442,7 @@ function renderDetail(e) {
     <!-- ── Meta view ── -->
     <div class="detail-section" id="meta-view-section">
       <div class="detail-section-title">📄 書誌情報
-        ${linkUrl ? `<a href="${esc(linkUrl)}" target="_blank" style="color:var(--accent);font-size:11px;font-weight:400;margin-left:auto;">外部リンク ↗</a>` : ''}
+        ${safeHref(linkUrl) ? `<a href="${esc(safeHref(linkUrl))}" target="_blank" style="color:var(--accent);font-size:11px;font-weight:400;margin-left:auto;">外部リンク ↗</a>` : ''}
       </div>
       <div class="detail-meta" id="meta-view">${metaHTML}</div>
     </div>
