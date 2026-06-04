@@ -327,4 +327,4 @@ if __name__ == '__main__':
     print("  BibManager")
     print(f"  http://localhost:{port}")
     print("=" * 50)
-    app.run(debug=True, port=port)
+    app.run(host='::', debug=True, port=port)
