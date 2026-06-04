@@ -15,25 +15,22 @@ cd papermanager
 python -m venv venv
 source venv/bin/activate          # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-PAPERMANAGER_DB=mydb.db python app.py
+python app.py
 ```
 
-`PAPERMANAGER_DB=mydb.db` を指定することで、リポジトリに含まれるデータベースとは別の空のデータベースが自動生成されます。
-
-> **毎回入力を省略したい場合** — プロジェクトルートに `.env` ファイルを作成してください：
-> ```
-> PAPERMANAGER_DB=mydb.db
-> ```
-> その後は `python app.py` だけで起動できます（python-dotenv は不要、シェルで `export PAPERMANAGER_DB=mydb.db` でも可）。
+初回起動時に空のデータベース `mydb.db` が自動生成されます。
 
 ブラウザで http://localhost:5000 を開く。
 
-### 開発者・リポジトリ管理者向け（既存DBを引き継ぐ場合）
+### リポジトリ管理者向け（git管理のDBを使う場合）
+
+`~/.zshrc`（または `~/.bash_profile`）に以下を1行追加してください（1回のみ）：
 
 ```bash
-source venv/bin/activate
-python app.py   # 環境変数なし → bibmanager.db（git管理）を使用
+export PAPERMANAGER_DB=bibmanager.db
 ```
+
+設定後は `python app.py` だけで `bibmanager.db`（git管理・個人データ入り）が使用されます。
 
 ## 初回の使い方
 

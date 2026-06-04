@@ -7,10 +7,9 @@ import sqlite3
 from pathlib import Path
 
 # DB path can be overridden via environment variable PAPERMANAGER_DB.
-# Default: bibmanager.db in the same directory as this file.
-#   Personal use (git-tracked DB):  python app.py
-#   Others (own fresh DB):          PAPERMANAGER_DB=mydb.db python app.py
-DB_PATH = Path(os.environ.get("PAPERMANAGER_DB", Path(__file__).parent / "bibmanager.db"))
+# Default: mydb.db  (works out-of-the-box for new users with no setup)
+# Repo owner: add `export PAPERMANAGER_DB=bibmanager.db` to ~/.zshrc (once per device)
+DB_PATH = Path(os.environ.get("PAPERMANAGER_DB", Path(__file__).parent / "mydb.db"))
 
 
 def _open_conn() -> sqlite3.Connection:
