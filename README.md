@@ -6,21 +6,34 @@ bibファイルと同期できる文献管理Webアプリ。
 
 ### 必要なもの
 - Python 3.10 以上
-- Flask（唯一の外部依存）
+
+### 初めて使う人向け（クローンから起動まで）
 
 ```bash
-pip install flask
+git clone https://github.com/LowToneVoice/papermanager.git
+cd papermanager
+python -m venv venv
+source venv/bin/activate          # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+PAPERMANAGER_DB=mydb.db python app.py
 ```
 
-### 起動
+`PAPERMANAGER_DB=mydb.db` を指定することで、リポジトリに含まれるデータベースとは別の空のデータベースが自動生成されます。
 
-```bash
-cd bibmanager
-source venv/bin/activate
-python app.py
-```
+> **毎回入力を省略したい場合** — プロジェクトルートに `.env` ファイルを作成してください：
+> ```
+> PAPERMANAGER_DB=mydb.db
+> ```
+> その後は `python app.py` だけで起動できます（python-dotenv は不要、シェルで `export PAPERMANAGER_DB=mydb.db` でも可）。
 
 ブラウザで http://localhost:5000 を開く。
+
+### 開発者・リポジトリ管理者向け（既存DBを引き継ぐ場合）
+
+```bash
+source venv/bin/activate
+python app.py   # 環境変数なし → bibmanager.db（git管理）を使用
+```
 
 ## 初回の使い方
 

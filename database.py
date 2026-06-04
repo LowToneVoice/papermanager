@@ -2,10 +2,15 @@
 SQLite database setup and CRUD operations for BibManager.
 """
 
+import os
 import sqlite3
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent / "bibmanager.db"
+# DB path can be overridden via environment variable PAPERMANAGER_DB.
+# Default: bibmanager.db in the same directory as this file.
+#   Personal use (git-tracked DB):  python app.py
+#   Others (own fresh DB):          PAPERMANAGER_DB=mydb.db python app.py
+DB_PATH = Path(os.environ.get("PAPERMANAGER_DB", Path(__file__).parent / "bibmanager.db"))
 
 
 def _open_conn() -> sqlite3.Connection:
