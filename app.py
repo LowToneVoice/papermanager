@@ -325,6 +325,6 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     print("=" * 50)
     print("  BibManager")
-    print(f"  http://localhost:{port}")
+    print(f"  http://127.0.0.1:{port}")
     print("=" * 50)
     app.run(debug=True, port=port)
